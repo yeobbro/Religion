@@ -39,3 +39,12 @@
 .quiet-prayer-actions button{border:1px solid var(--green);background:var(--green);color:#fff;padding:8px 13px;font-size:9px;cursor:pointer}
 .quiet-prayer-actions button.quiet-reset{background:transparent;color:var(--green);border-color:#d9cfbb}
 .quiet-prayer-actions button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+
+
+/* Mobile touch movement pad for both 3D spaces */
+.touch-pad{display:none;position:absolute;z-index:8;right:14px;bottom:42px;flex-direction:column;align-items:center;gap:5px;touch-action:none;user-select:none}
+.touch-pad>div{display:flex;gap:5px}
+.touch-pad button{width:38px;height:38px;border:1px solid #e8dfca88;border-radius:9px;background:#20251fc9;color:#f6edda;font-size:13px;backdrop-filter:blur(8px);touch-action:none;user-select:none;-webkit-user-select:none}
+.touch-pad button:active{background:#d8c69a;color:#25271f}
+@media(max-width:760px){.touch-pad{display:flex}.desktop-controls-hint{display:none}.scene3d-bottom{right:12px;left:12px;bottom:10px}.scene3d-bottom>span:first-child{max-width:60%;line-height:1.5}}
+@media(hover:none) and (pointer:coarse){.touch-pad{display:flex}}
