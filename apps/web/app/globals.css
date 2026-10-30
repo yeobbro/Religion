@@ -48,3 +48,11 @@
 .touch-pad button:active{background:#d8c69a;color:#25271f}
 @media(max-width:760px){.touch-pad{display:flex}.desktop-controls-hint{display:none}.scene3d-bottom{right:12px;left:12px;bottom:10px}.scene3d-bottom>span:first-child{max-width:60%;line-height:1.5}}
 @media(hover:none) and (pointer:coarse){.touch-pad{display:flex}}
+
+
+/* Live room occupancy and reserved seat */
+.room-presence{position:absolute;z-index:6;left:16px;bottom:42px;display:flex;align-items:center;gap:7px;padding:8px 11px;background:#171a18d9;border:1px solid #d9c9a255;color:#e8dfca;font-size:9px;letter-spacing:.2px;backdrop-filter:blur(8px)}
+.room-presence strong{font-weight:600;color:#f0d8a9;font-variant-numeric:tabular-nums}
+.room-presence-dot{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#9c927e}
+.room-presence-dot.connected{background:#9eb78a;box-shadow:0 0 8px #9eb78a}
+@media(max-width:760px){.room-presence{left:12px;bottom:42px;font-size:8px;padding:7px 9px}}
