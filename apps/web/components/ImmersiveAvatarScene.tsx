@@ -96,16 +96,6 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const makeMat = (color: string, roughness = 0.82, metalness = 0, map?: THREE.Texture) =>
       new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
 
-    const woodColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_diff_2k.jpg');
-    const woodNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_nor_gl_2k.jpg');
-    const woodRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_rough_2k.jpg');
-    loadedTextures.push(woodColorMap, woodNormalMap, woodRoughnessMap);
-    [woodColorMap, woodNormalMap, woodRoughnessMap].forEach(texture => {
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(2.5, 1.5);
-    });
-    woodColorMap.colorSpace = THREE.SRGBColorSpace;
-
 
     // Photo-scanned PBR stone from Poly Haven (CC0) for the cathedral masonry.
     const textureLoader = new THREE.TextureLoader();
@@ -123,6 +113,17 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     cathedralInteriorPhoto.colorSpace = THREE.SRGBColorSpace;
     maryShrinePhoto.colorSpace = THREE.SRGBColorSpace;
     loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto);
+
+    const woodColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_diff_2k.jpg');
+    const woodNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_nor_gl_2k.jpg');
+    const woodRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_rough_2k.jpg');
+    loadedTextures.push(woodColorMap, woodNormalMap, woodRoughnessMap);
+    [woodColorMap, woodNormalMap, woodRoughnessMap].forEach(texture => {
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(2.5, 1.5);
+    });
+    woodColorMap.colorSpace = THREE.SRGBColorSpace;
+
 
     const plaster = makeMat('#d7d0c0', 0.94, 0, makeNoiseTexture('#d7d0c0', 2, 4, 3));
     const darkPlaster = makeMat('#938d80', 0.94, 0, makeNoiseTexture('#938d80', 4, 3, 2));
@@ -564,6 +565,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     // Volumetric Marian sculpture: carved robe, blue mantle, veil, face and joined hands.
     const maryStatue = new THREE.Group();
     maryStatue.position.set(-0.82, 0, 0);
+    maryStatue.rotation.y = Math.PI / 2;
     maryGrotto.add(maryStatue);
     const statueIvory = makeMat('#eee9de', 0.74, 0.02);
     const statueBlue = makeMat('#526f9d', 0.78, 0.02);
