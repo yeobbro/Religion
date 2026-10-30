@@ -39,3 +39,7 @@ create policy "users submit own intentions" on public.prayer_intentions
 
 -- Realtime is used only for public prayer intentions; private intentions are never broadcast.
 alter publication supabase_realtime add table public.prayer_intentions;
+
+-- Explicit grants for the application roles.
+grant select on public.parishes to anon, authenticated;
+grant select, insert on public.prayer_intentions to authenticated;
