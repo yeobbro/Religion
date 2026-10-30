@@ -182,6 +182,9 @@ export default function ChapelExperience() {
   };
 
   const leaveImmersive = () => {
+    audioRef.current?.pause();
+    setImmersiveAudioMode('off');
+    setIsPlaying(false);
     setImmersive(false);
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
@@ -218,6 +221,11 @@ export default function ChapelExperience() {
               <span>VOL</span>
               <input type="range" min="0" max="1" step="0.01" value={volume} onChange={event => setVolume(Number(event.target.value))} />
             </label>
+            {immersiveAudioMode === 'ambient' ? (
+              <a className="immersive-audio-credit" href="https://commons.wikimedia.org/wiki/File:Wholesome_by_Kevin_MacLeod.ogg" target="_blank" rel="noreferrer">Wholesome · Kevin MacLeod · CC BY 4.0</a>
+            ) : immersiveAudioMode === 'chant' ? (
+              <a className="immersive-audio-credit" href="https://commons.wikimedia.org/wiki/File:Veni.sancte.spiritus.ogg" target="_blank" rel="noreferrer">Veni Sancte Spiritus · Public Domain</a>
+            ) : null}
             {audioNotice ? <span className="immersive-audio-notice" role="status">{audioNotice}</span> : null}
           </div>
           <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
