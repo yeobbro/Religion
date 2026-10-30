@@ -21,7 +21,7 @@ type RoomSnapshot = {
 };
 type RoomStatus = "offline" | "connecting" | "connected" | "error";
 
-export function useReligionRoom(space: Space) {
+export function useReligionRoom(space: Space, baptismalName: string, enabled = true) {
   const [status, setStatus] = useState<RoomStatus>("offline");
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [seatNumber, setSeatNumber] = useState<number | undefined>();
@@ -29,7 +29,7 @@ export function useReligionRoom(space: Space) {
 
   useEffect(() => {
     const endpoint = process.env.NEXT_PUBLIC_GAME_SERVER_URL;
-    if (!endpoint) {
+    if (!enabled || !endpoint) {
       setStatus("offline");
       setSnapshot(null);
       return;
@@ -45,7 +45,7 @@ export function useReligionRoom(space: Space) {
         const client = new Client(endpoint);
         room = await client.joinOrCreate("spiritual-space", {
           space,
-          displayName: "순례자",
+          displayName: baptismalName.trim().slice(0, 18) || "순례자",
         });
         if (!active) {
           await room.leave();
@@ -84,7 +84,7 @@ export function useReligionRoom(space: Space) {
       active = false;
       if (room) void room.leave();
     };
-  }, [space]);
+  }, [space, baptismalName, enabled]);
 
   return {
     status,
