@@ -498,7 +498,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42);
         for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z);
         // The backrest blocks passage; the raised seat surface remains available for sitting.
-        addBlocker(x, z + 0.42, 1.8, 0.12);
+        addBlocker(x, z + 0.42, 1.8, 0.02);
       }
     }
 
@@ -975,7 +975,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const seatSpots: THREE.Vector3[] = [];
     for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
       for (const sideX of [-4.25, 4.25]) {
-        for (const offset of [-0.7, 0, 0.7]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z - 0.12));
+        for (const offset of [-0.7, 0, 0.7]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z));
       }
     }
     const occupiedSeats = new Set<number>();
@@ -992,7 +992,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
 
     const keys = new Set<string>();
-    let yaw = 0, pitch = 0.08, cameraDistance = 3.8;
+    let yaw = 0, pitch = 0.08, cameraDistance = 2.4;
     let pointerDown = false, pointerMoved = false, pointerTouch = false;
     let lastX = 0, lastY = 0, downX = 0, downY = 0;
     let pinchDistance = 0, joystickX = 0, joystickY = 0;
@@ -1444,7 +1444,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightForearm.rotation.x = -0.22 * sitEase;
         leftFingers.forEach(finger => { finger.rotation.z = 0.035; });
         rightFingers.forEach(finger => { finger.rotation.z = -0.035; });
-        head.rotation.x = 0.07 * sitEase;
+        head.rotation.x = -0.04 * sitEase;
       } else if (gesture.current === 'dip') {
         const t = Math.min(1, (performance.now() - gestureAt.current) / 980);
         const reach = Math.sin(t * Math.PI);
@@ -1452,7 +1452,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightArm.rotation.z = -0.68 * reach;
         rightForearm.rotation.x = 0.55 * reach;
         rightHand.rotation.z = -0.18 * reach;
-        head.rotation.x = 0.12 * reach;
+        head.rotation.x = -0.12 * reach;
         if (t >= 1) gesture.current = 'idle';
       } else if (gesture.current === 'stand') {
         const t = Math.min(1, (performance.now() - gestureAt.current) / 640);
@@ -1483,7 +1483,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const t = Math.min(1, (performance.now() - gestureAt.current) / 780);
         const ease = t * t * (3 - 2 * t);
         avatar.position.y = -0.22 * ease;
-        torso.rotation.x = -0.035 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
+        torso.rotation.x = -0.11 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
         leftLeg.rotation.x = 0.08 * ease;
         rightLeg.rotation.x = 0.08 * ease;
         leftKnee.rotation.x = -1.5 * ease;
@@ -1494,28 +1494,28 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightArm.rotation.z = -0.6 * ease;
         leftForearm.rotation.x = 1.22 * ease;
         rightForearm.rotation.x = 1.22 * ease;
-        leftForearm.rotation.z = -0.13 * ease;
-        rightForearm.rotation.z = 0.13 * ease;
+        leftForearm.rotation.z = 0.13 * ease;
+        rightForearm.rotation.z = -0.13 * ease;
         leftHand.rotation.z = -0.12 * ease;
         rightHand.rotation.z = 0.12 * ease;
         leftFingers.forEach(finger => { finger.rotation.z = 0.07 * ease; });
         rightFingers.forEach(finger => { finger.rotation.z = -0.07 * ease; });
         leftThumb.rotation.z = 0.2 * ease;
         rightThumb.rotation.z = -0.2 * ease;
-        head.rotation.x = 0.18 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
+        head.rotation.x = -0.18 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
       } else if (gesture.current === 'rosary') {
         const t = THREE.MathUtils.clamp((performance.now() - gestureAt.current) / 620, 0, 1);
         const blend = t * t * (3 - 2 * t);
         leftArm.rotation.x = 0.82 * blend; rightArm.rotation.x = 0.82 * blend;
         leftArm.rotation.z = 0.58 * blend; rightArm.rotation.z = -0.58 * blend;
         leftForearm.rotation.x = 1.18 * blend; rightForearm.rotation.x = 1.18 * blend;
-        leftForearm.rotation.z = -0.13 * blend; rightForearm.rotation.z = 0.13 * blend;
+        leftForearm.rotation.z = 0.13 * blend; rightForearm.rotation.z = -0.13 * blend;
         leftHand.rotation.z = -0.12 * blend; rightHand.rotation.z = 0.12 * blend;
         leftFingers.forEach((finger, index) => { finger.rotation.z = (0.10 + (index - 1.5) * 0.035) * blend; });
         rightFingers.forEach((finger, index) => { finger.rotation.z = (-0.10 + (index - 1.5) * 0.035) * blend; });
         leftThumb.rotation.z = 0.25 * blend;
         rightThumb.rotation.z = -0.25 * blend;
-        head.rotation.x = 0.13 * blend;
+        head.rotation.x = -0.13 * blend;
         rosary.visible = true;
         rosary.rotation.z = Math.sin(clock.elapsedTime * 1.15) * 0.018;
         rosary.rotation.y = Math.sin(clock.elapsedTime * 0.8) * 0.025;
@@ -1545,7 +1545,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightHand.rotation.x = -0.08;
         leftArm.rotation.x = 0.04;
         leftForearm.rotation.x = 0.04;
-        head.rotation.x = t < 0.98 ? 0.035 : 0;
+        head.rotation.x = t < 0.98 ? -0.035 : 0;
         if (t >= 1) gesture.current = 'idle';
       } else if (gesture.current === 'prayer') {
         const t = THREE.MathUtils.clamp((performance.now() - gestureAt.current) / 520, 0, 1);
@@ -1557,21 +1557,21 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightArm.rotation.z = -0.6 * blend;
         leftForearm.rotation.x = 1.22 * blend;
         rightForearm.rotation.x = 1.22 * blend;
-        leftForearm.rotation.z = -0.13 * blend;
-        rightForearm.rotation.z = 0.13 * blend;
+        leftForearm.rotation.z = 0.13 * blend;
+        rightForearm.rotation.z = -0.13 * blend;
         leftHand.rotation.z = -0.12 * blend;
         rightHand.rotation.z = 0.12 * blend;
         leftFingers.forEach(finger => { finger.rotation.z = 0.07 * blend; });
         rightFingers.forEach(finger => { finger.rotation.z = -0.07 * blend; });
         leftThumb.rotation.z = 0.2 * blend;
         rightThumb.rotation.z = -0.2 * blend;
-        head.rotation.x = (0.18 + breath * 0.45) * blend;
+        head.rotation.x = (-0.18 + breath * 0.45) * blend;
         torso.rotation.x = (-0.025 + breath * 0.5) * blend;
       } else if (gesture.current === 'bow') {
         const t = Math.min(1, (performance.now() - gestureAt.current) / 1500);
         const pulse = Math.sin(t * Math.PI);
-        head.rotation.x = 0.38 * pulse;
-        torso.rotation.x = 0.16 * pulse;
+        head.rotation.x = -0.38 * pulse;
+        torso.rotation.x = -0.16 * pulse;
         avatar.position.y = -0.025 * pulse;
         leftArm.rotation.x = -0.08 * pulse;
         rightArm.rotation.x = -0.08 * pulse;
@@ -1592,8 +1592,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
 
 
-      const eyeHeight = isSitting ? 1.55 : 1.72;
-      // Shoulder-height follow camera: pitch changes only the viewing direction, never the camera's world height.
+      const eyeHeight = 1.52 + avatar.position.y;
+      // Close over-the-shoulder eye-line camera: only gaze direction changes when looking up or down.
       cameraTarget.set(
         avatar.position.x - Math.sin(yaw) * cameraDistance,
         eyeHeight,
