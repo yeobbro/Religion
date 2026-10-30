@@ -29,3 +29,13 @@
 .space-switch button.active{background:#e9dfc9;color:#29271f}
 .scene3d-wrap{isolation:isolate}
 @media(max-width:760px){.space-switch{top:48px}.space-switch button{padding:7px 10px;font-size:9px}}
+
+
+/* Guided quiet-prayer timer */
+.quiet-prayer{margin:12px auto 4px;padding:15px 18px;width:min(100%,290px);border:1px solid #e9e1d2;background:#f8f5ee;text-align:center}
+.quiet-prayer-time{font-family:'DM Sans',sans-serif;font-size:30px;font-weight:400;letter-spacing:2px;color:var(--green);font-variant-numeric:tabular-nums}
+.quiet-prayer p{margin:4px 0 12px;font-size:9px;line-height:1.6;color:#898477}
+.quiet-prayer-actions{display:flex;justify-content:center;gap:8px}
+.quiet-prayer-actions button{border:1px solid var(--green);background:var(--green);color:#fff;padding:8px 13px;font-size:9px;cursor:pointer}
+.quiet-prayer-actions button.quiet-reset{background:transparent;color:var(--green);border-color:#d9cfbb}
+.quiet-prayer-actions button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
