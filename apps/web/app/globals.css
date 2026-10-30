@@ -56,3 +56,59 @@
 .room-presence-dot{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#9c927e}
 .room-presence-dot.connected{background:#9eb78a;box-shadow:0 0 8px #9eb78a}
 @media(max-width:760px){.room-presence{left:12px;bottom:42px;font-size:8px;padding:7px 9px}}
+
+
+/* Photo-led RELIGION lobby and immersive full-screen visit */
+.lobby-visual{height:420px;min-height:340px;position:relative;overflow:hidden;background-size:cover;background-position:center;box-shadow:0 18px 55px #24201738;border:1px solid #ffffff24}
+.lobby-visual:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,#080c0a22 0%,transparent 38%,#080c0acc 100%);pointer-events:none}
+.lobby-topline,.lobby-space-switch,.lobby-bottom,.lobby-photo-credit{position:absolute;z-index:2}
+.lobby-topline{top:18px;left:18px;right:18px;display:flex;align-items:center;justify-content:space-between;color:#fff;font-size:9px;letter-spacing:1.5px;text-shadow:0 1px 8px #000}
+.lobby-online{display:flex;align-items:center;gap:7px;letter-spacing:.2px}.lobby-online i{width:6px;height:6px;border-radius:50%;background:#a8cf8b;box-shadow:0 0 9px #a8cf8b}
+.lobby-space-switch{top:56px;right:18px;display:flex;gap:6px}
+.lobby-space-switch button{border:1px solid #ffffff70;background:#171b18aa;color:#fff;padding:8px 14px;font-size:10px;cursor:pointer;backdrop-filter:blur(10px)}
+.lobby-space-switch button.active{background:#f0e7d6;color:#29271f;border-color:#f0e7d6}
+.lobby-bottom{left:20px;right:20px;bottom:36px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lobby-avatar-card{display:flex;align-items:center;gap:11px;padding:9px 15px 9px 9px;background:#111512c9;border:1px solid #ffffff55;border-radius:999px;color:#fff;backdrop-filter:blur(12px)}
+.lobby-avatar-mark,.immersive-avatar-mark{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#e5d2ae,#8e7656);border:2px solid #f6ead1;color:#211f1a;font-family:Georgia,serif;font-size:23px;font-weight:700}
+.lobby-avatar-card strong,.lobby-avatar-card small{display:block}.lobby-avatar-card strong{font-size:13px;letter-spacing:.2px}.lobby-avatar-card small{margin-top:3px;font-size:9px;color:#e4ddce}
+.lobby-enter{display:inline-flex;align-items:center;gap:18px;border:0;border-radius:999px;background:#f7f1e7;color:#29271f;padding:15px 20px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 6px 24px #0004;transition:transform .2s,background .2s}
+.lobby-enter:hover{transform:translateY(-2px);background:#fff}.lobby-enter span{font-size:17px}
+.lobby-photo-credit{right:14px;bottom:9px;color:#ffffffa8;font-size:8px;text-shadow:0 1px 4px #000}
+.immersive-room{position:fixed;inset:0;z-index:9999;width:100vw;height:100vh;height:100dvh;overflow:hidden;background:#111612;color:#fff;font-family:'DM Sans','Noto Serif KR',sans-serif}
+.immersive-photo{position:absolute;inset:0;background-position:center;background-size:cover;transform:scale(1.015);transition:background-image .35s ease}
+.immersive-shade{position:absolute;inset:0;background:linear-gradient(90deg,#090d0bd1 0%,#090d0b73 34%,#090d0b12 76%),linear-gradient(0deg,#090d0bc9 0%,transparent 44%,#090d0b55 100%)}
+.immersive-toolbar{position:absolute;z-index:5;top:0;left:0;right:0;min-height:76px;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(180deg,#0b100ee0,#0b100e00)}
+.immersive-player{display:flex;align-items:center;gap:10px;min-width:170px}.immersive-player strong,.immersive-player small{display:block}.immersive-player strong{font-size:13px;letter-spacing:.3px}.immersive-player small{font-size:9px;color:#e1d7c4;margin-top:3px}
+.immersive-avatar-mark{width:40px;height:40px;font-size:20px}
+.immersive-space-switch{display:flex;gap:8px;padding:5px;border:1px solid #ffffff55;border-radius:999px;background:#1117139c;backdrop-filter:blur(12px)}
+.immersive-space-switch button{border:0;border-radius:999px;padding:10px 24px;background:transparent;color:#f6f0e4;font-size:11px;cursor:pointer}
+.immersive-space-switch button.active{background:#eee4d2;color:#27241d;font-weight:700}
+.immersive-exit{border:1px solid #ffffff70;background:#1015128c;color:#fff;border-radius:999px;padding:10px 16px;font-size:10px;cursor:pointer;backdrop-filter:blur(10px)}
+.immersive-exit span{margin-left:8px}
+.immersive-world{position:absolute;inset:0}
+.immersive-copy{position:absolute;left:7vw;top:21vh;width:min(420px,42vw);text-shadow:0 2px 18px #0008}
+.immersive-kicker{font-size:9px;letter-spacing:2.4px;color:#e9d5ab}
+.immersive-copy h1{margin:18px 0 14px;font-family:'Noto Serif KR',serif;font-weight:500;line-height:1.45;font-size:clamp(32px,4.5vw,62px);letter-spacing:-1.5px}
+.immersive-copy h1 em{font-style:normal;color:#f0d4a1}
+.immersive-copy p{max-width:340px;font-family:'Noto Serif KR',serif;font-size:13px;line-height:2;color:#eee8dc}
+.world-avatar{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:210px;height:min(46vh,410px);min-height:270px;filter:drop-shadow(0 12px 18px #0008);pointer-events:none}
+.world-avatar span{position:absolute;display:block}
+.world-avatar-head{z-index:3;top:9%;left:39%;width:22%;height:18%;border-radius:46% 46% 43% 43%;background:linear-gradient(90deg,#b78361,#e0b38d 52%,#9f6d50)}
+.world-avatar-hair{z-index:4;top:5%;left:35%;width:30%;height:12%;border-radius:60% 60% 36% 36%;background:linear-gradient(90deg,#171a1c,#39302a 50%,#16191b);box-shadow:inset 0 -8px 0 #211b19}
+.world-avatar-neck{z-index:2;top:23%;left:45%;width:10%;height:8%;background:#b78361}
+.world-avatar-backpack{z-index:5;top:31%;left:24%;width:52%;height:39%;border-radius:25px 25px 16px 16px;background:linear-gradient(90deg,#272c2d,#4a4941 48%,#202425);border:3px solid #777366;box-shadow:inset 0 0 0 5px #343936}
+.world-avatar-body{z-index:3;top:29%;left:17%;width:66%;height:42%;border-radius:39% 39% 14% 14%;background:linear-gradient(90deg,#8e897b,#d0c5ae 48%,#827d72);clip-path:polygon(18% 0,82% 0,100% 100%,0 100%)}
+.world-avatar-arm{z-index:2;top:32%;width:19%;height:36%;border-radius:30px;background:linear-gradient(90deg,#8b8377,#d5c7af)}
+.world-avatar-arm-left{left:8%;transform:rotate(5deg)}.world-avatar-arm-right{right:8%;transform:rotate(-5deg)}
+.world-avatar-leg{z-index:1;top:67%;width:25%;height:27%;background:linear-gradient(90deg,#2b3031,#505252 50%,#252a2a);border-radius:9px 9px 5px 5px}
+.world-avatar-leg-left{left:24%;transform:rotate(1deg)}.world-avatar-leg-right{right:24%;transform:rotate(-1deg)}
+.world-avatar-shoe{z-index:2;bottom:0;width:28%;height:7%;border-radius:8px 14px 5px 5px;background:#191d1e}
+.world-avatar-shoe-left{left:20%}.world-avatar-shoe-right{right:20%}
+.immersive-presence{position:absolute;right:30px;bottom:32px;display:flex;align-items:center;gap:8px;padding:11px 15px;border:1px solid #ffffff4d;border-radius:999px;background:#111713a6;color:#f3eddf;font-size:10px;backdrop-filter:blur(12px)}
+.immersive-presence strong{color:#f3d8a7;font-variant-numeric:tabular-nums}
+.immersive-footer{position:absolute;z-index:5;left:28px;right:28px;bottom:14px;display:flex;justify-content:space-between;gap:16px;color:#ffffffa6;font-size:8px;text-shadow:0 1px 5px #000}
+@media(max-width:760px){
+  .lobby-visual{height:370px;min-height:330px}.lobby-bottom{left:12px;right:12px;bottom:28px;align-items:flex-start;flex-direction:column}.lobby-avatar-card{padding:7px 12px 7px 7px}.lobby-avatar-mark{width:38px;height:38px}.lobby-enter{width:100%;justify-content:space-between;padding:13px 18px}.lobby-space-switch{top:55px;left:12px;right:auto}.lobby-photo-credit{right:9px;bottom:7px;font-size:7px}
+  .immersive-toolbar{padding:12px;min-height:65px;gap:8px}.immersive-player{min-width:0;gap:7px}.immersive-player small{display:none}.immersive-avatar-mark{width:34px;height:34px;font-size:17px}.immersive-player strong{font-size:11px}.immersive-space-switch{gap:2px;padding:3px}.immersive-space-switch button{padding:9px 12px;font-size:10px}.immersive-exit{padding:9px 11px;font-size:9px}.immersive-copy{left:22px;top:17vh;width:78vw}.immersive-copy h1{font-size:38px}.immersive-copy p{max-width:270px;font-size:11px}.world-avatar{width:155px;height:300px;min-height:0}.immersive-presence{right:12px;bottom:42px;padding:9px 11px;font-size:8px}.immersive-footer{left:12px;right:12px;bottom:12px;font-size:7px}.immersive-footer span:last-child{display:none}
+}
+@media(prefers-reduced-motion:reduce){.lobby-enter,.immersive-photo{transition:none}}
