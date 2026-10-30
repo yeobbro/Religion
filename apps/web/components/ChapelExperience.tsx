@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import ImmersiveAvatarScene from './ImmersiveAvatarScene';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { useReligionRoom } from '@/lib/use-religion-room';
 
@@ -160,44 +161,14 @@ export default function ChapelExperience() {
         <div className="immersive-photo" style={{ backgroundImage: `url("${photo}")` }} />
         <div className="immersive-shade" />
         <header className="immersive-toolbar">
-          <div className="immersive-player">
-            <span className="immersive-avatar-mark">Y</span>
-            <span><strong>Yden</strong><small>내 아바타 · 접속 중</small></span>
-          </div>
+          <div className="immersive-player" aria-label="Yden avatar"><span className="immersive-avatar-mark">Y</span></div>
           <div className="immersive-space-switch" aria-label="공간 선택">
             <button type="button" className={space === 'chapel' ? 'active' : ''} onClick={() => setSpace('chapel')}>성당</button>
             <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
           </div>
-          <button type="button" className="immersive-exit" onClick={leaveImmersive}>나가기 <span>↗</span></button>
+          <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
         </header>
-        <section className="immersive-world">
-          <div className="immersive-copy">
-            <span className="immersive-kicker">{space === 'chapel' ? 'A QUIET PLACE TO PRAY' : 'A QUIET PLACE IN NATURE'}</span>
-            <h1>{space === 'chapel' ? <>잠시 멈추고,<br/><em>마음에 평화를.</em></> : <>자연 속에서,<br/><em>천천히 쉬어가기.</em></>}</h1>
-            <p>{space === 'chapel' ? '고요한 성당 안에서 나만의 기도와 묵상의 시간을 가져보세요.' : '물소리와 나무가 있는 정원에서 마음을 가라앉히고 잠시 머물러 보세요.'}</p>
-          </div>
-          <div className="world-avatar" role="img" aria-label="Yden의 아바타">
-            <span className="world-avatar-hair" />
-            <span className="world-avatar-head" />
-            <span className="world-avatar-neck" />
-            <span className="world-avatar-backpack" />
-            <span className="world-avatar-body" />
-            <span className="world-avatar-arm world-avatar-arm-left" />
-            <span className="world-avatar-arm world-avatar-arm-right" />
-            <span className="world-avatar-leg world-avatar-leg-left" />
-            <span className="world-avatar-leg world-avatar-leg-right" />
-            <span className="world-avatar-shoe world-avatar-shoe-left" />
-            <span className="world-avatar-shoe world-avatar-shoe-right" />
-          </div>
-          <div className="immersive-presence" aria-live="polite">
-            <span className={room.status === 'connected' ? 'room-presence-dot connected' : 'room-presence-dot'} />
-            {room.status === 'connected' ? <>현재 공간 <strong>{room.occupancy}/{room.capacity}명</strong>{room.seatNumber ? <span> · 좌석 {room.seatNumber}</span> : null}</> : room.status === 'connecting' ? '공간 연결 중...' : '개인 체험 공간'}
-          </div>
-        </section>
-        <footer className="immersive-footer">
-          <span>{space === 'chapel' ? 'Photo by Georgi Kalaydzhiev' : 'Photo by Shawn Kim'} · Unsplash</span>
-          <span>ESC 키 또는 나가기로 화면 복귀</span>
-        </footer>
+        <section className="immersive-world" aria-label={space === 'chapel' ? '성당 체험 공간' : '정원 체험 공간'}><ImmersiveAvatarScene space={space} /></section>
       </main>
     );
   }
