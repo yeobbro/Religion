@@ -116,10 +116,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const marbleFloorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Milan_Cathedral%2C_floor.jpg/1280px-Milan_Cathedral%2C_floor.jpg');
     const vaultedCeilingPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Gloucester_Cathedral_Vaulted_Ceiling.jpg/1356px-Gloucester_Cathedral_Vaulted_Ceiling.jpg');
     const exteriorFacadePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Notre_Dame_Cathedral_Facade.jpg?width=1600');
-    for (const texture of [cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto]) {
+    const courtyardPhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Gloucester_Cathedral_courtyard.JPG?width=1600');
+    for (const texture of [cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto, courtyardPhoto]) {
       texture.colorSpace = THREE.SRGBColorSpace;
     }
-    loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto);
+    loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto, courtyardPhoto);
 
     const woodColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_diff_2k.jpg');
     const woodNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_nor_gl_2k.jpg');
@@ -242,6 +243,22 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       side: THREE.DoubleSide,
     });
     const exteriorFacadeBackdrop = addMesh(world, new THREE.PlaneGeometry(46, 32), exteriorFacadeMaterial, 0, 16, 75, false, false);
+    const courtyardPhotoMaterial = new THREE.MeshStandardMaterial({
+      map: courtyardPhoto,
+      roughness: 1,
+      side: THREE.DoubleSide,
+    });
+    const courtyardPhotoBackdrop = addMesh(
+      world,
+      new THREE.PlaneGeometry(34, 18),
+      courtyardPhotoMaterial,
+      21.5,
+      8.8,
+      43,
+      false,
+      false,
+    );
+    courtyardPhotoBackdrop.rotation.y = -Math.PI / 2;
 
     // Monumental west facade: rose window and twin towers inspired by the great French Gothic cathedrals.
     const roseWindow = new THREE.Group();
@@ -1640,6 +1657,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       marySignTexture.dispose();
       ceilingPhotoMaterial.dispose();
       exteriorFacadeMaterial.dispose();
+      courtyardPhotoMaterial.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
@@ -1717,6 +1735,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         <a href="https://commons.wikimedia.org/wiki/File:Interior_of_St._Vitus_Cathedral,_Nave,_Prague_20160809_1.jpg" target="_blank" rel="noreferrer">내부 DXR · CC BY-SA 4.0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_Vaulted_Ceiling.jpg" target="_blank" rel="noreferrer">천장 Zhurakovskyi · CC0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:Milan_Cathedral,_floor.jpg" target="_blank" rel="noreferrer">바닥 Gerda Arendt · CC0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_courtyard.JPG" target="_blank" rel="noreferrer">외부 정원 Fæ · CC BY-SA 3.0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:The_Lourdes_Grotto.jpg" target="_blank" rel="noreferrer">성모 기도처 ELeibiger · CC BY 4.0</a>
       </div>
     </div>
