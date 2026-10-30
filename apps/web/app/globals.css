@@ -482,3 +482,42 @@
 @media (max-width: 760px), (pointer: coarse) {
   .immersive-audio-credit { display: none; }
 }
+
+/* 3D world overlays: loading, candle intentions, confessional */
+.world-loading{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#2a2118,#0d0b09);color:#e9d8b6;font-family:'Noto Serif KR',serif;font-size:15px;letter-spacing:1px}
+.world-action-bar{flex-wrap:wrap;justify-content:center;max-width:min(980px,96vw)}
+.world-action-bar button[aria-pressed="true"]{background:#e9d6ad;color:#2b2416;border-color:#e9d6ad}
+.candle-picker{position:absolute;z-index:14;left:50%;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(440px,92vw);padding:18px;border-radius:18px;border:1px solid #f1d9a455;background:#15110dee;color:#f3e7cf;box-shadow:0 20px 60px #000a;backdrop-filter:blur(14px);text-align:center;font-family:'Noto Serif KR',serif}
+.candle-picker p{margin:0 0 12px;font-size:15px}
+.candle-picker>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.candle-picker button{border:1px solid #e4c88d66;background:#2a2017;color:#f6ead1;border-radius:12px;padding:12px 10px;font-size:13px;cursor:pointer}
+.candle-picker button:hover{background:#3a2c1d}
+.candle-picker .candle-picker-close{margin-top:10px;background:transparent;border:0;color:#cdb98f;font-size:12px}
+.confession-panel{position:absolute;z-index:15;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 60%,#0000 30%,#000a 100%);pointer-events:none}
+.confession-panel>*{pointer-events:auto}
+.confession-panel form,.confession-release{width:min(520px,92vw);padding:22px;border-radius:20px;background:#120e0bdd;border:1px solid #e4c88d44;color:#f3e7cf;box-shadow:0 24px 80px #000c;backdrop-filter:blur(10px);font-family:'Noto Serif KR',serif}
+.confession-panel h2{margin:0 0 8px;font-size:20px;font-weight:500;color:#f1d9a4}
+.confession-panel p{margin:0 0 12px;font-size:12.5px;line-height:1.75;color:#d8ccb4}
+.confession-panel textarea{width:100%;min-height:140px;box-sizing:border-box;border-radius:12px;border:1px solid #e4c88d44;background:#1d1611;color:#f6ead1;padding:12px;font:inherit;font-size:14px;line-height:1.7;resize:vertical}
+.confession-buttons{display:flex;justify-content:space-between;gap:10px;margin-top:12px}
+.confession-panel button{border:0;border-radius:999px;padding:11px 18px;background:#e9d6ad;color:#2b2416;font-weight:600;cursor:pointer}
+.confession-panel button:disabled{opacity:.45;cursor:default}
+.confession-panel button.ghost{background:transparent;color:#d8ccb4;border:1px solid #d8ccb455}
+.confession-release{text-align:center;background:#120e0b99}
+.released-text{min-height:60px;font-size:16px!important;color:#fff6dd!important;word-break:keep-all}
+.released-text span{display:inline-block;white-space:pre;animation:rise-to-light 2.6s ease-in forwards}
+@keyframes rise-to-light{0%{opacity:1;transform:none;filter:none;text-shadow:0 0 0 #fff0}40%{color:#fff;text-shadow:0 0 12px #ffe7a8}100%{opacity:0;transform:translateY(-90px) scale(.6);filter:blur(3px);text-shadow:0 0 22px #ffe7a8}}
+.confession-peace{font-size:15px!important;color:#f1d9a4!important;animation:fade-in 1.5s 2.2s both}
+.confession-release button{animation:fade-in 1s 3s both}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.released-text span{animation:none;opacity:.2}}
+/* Ten devotional actions: one row on desktop, three columns on phones. */
+.world-action-bar{grid-template-columns:repeat(10,minmax(0,1fr))}
+.world-action-bar button{padding:0 6px}
+@media (max-width: 760px), (pointer: coarse){
+  .world-action-bar{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .world-action-notice{bottom:168px}
+  .candle-picker{bottom:200px}
+}
+.confession-panel{z-index:40}
+.world-action-bar[hidden]{display:none!important}

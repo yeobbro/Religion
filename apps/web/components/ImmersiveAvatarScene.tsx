@@ -1,1336 +1,463 @@
 'use client';
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import * as THREE from 'three';
+import { Avatar } from '@/lib/world/avatar';
+import { buildSite, type Blocker, type Site } from '@/lib/world/cathedral';
+import { glowTexture } from '@/lib/world/textures';
 
 type Props = { displayName: string };
-type Blocker = { x: number; z: number; rx: number; rz: number };
+
+type Action =
+  | 'cross' | 'prayer' | 'rosary' | 'bow' | 'greet' | 'seat' | 'veil' | 'candle' | 'confess' | 'mary';
+
+type Api = {
+  act: (a: Action) => void;
+  dip: () => void;
+  lightCandle: (intention: string) => void;
+  finishConfession: () => void;
+  leaveConfession: () => void;
+};
+
+const INTENTIONS = ['사랑하는 사람을 위해', '아픈 이의 치유를 위해', '세상을 떠난 이를 위해', '감사의 마음으로'];
+const AVATAR_RADIUS = 0.3;
+
+const gridCache = new WeakMap<Blocker[], Uint8Array>();
+
+/** Grid A* over the ground plane; returns waypoints (corners only), or [] if unreachable. */
+const findPath = (blockers: Blocker[], bounds: Site['bounds'], sx: number, sz: number, gx: number, gz: number): THREE.Vector3[] => {
+  const cell = 0.5;
+  const cols = Math.ceil((bounds.maxX - bounds.minX) / cell) + 1;
+  const rows = Math.ceil((bounds.maxZ - bounds.minZ) / cell) + 1;
+  const total = cols * rows;
+  let blocked = gridCache.get(blockers);
+  if (!blocked) {
+    blocked = new Uint8Array(total);
+    for (const b of blockers) {
+      const x0 = Math.max(0, Math.ceil((b.x - b.rx - AVATAR_RADIUS - bounds.minX) / cell));
+      const x1 = Math.min(cols - 1, Math.floor((b.x + b.rx + AVATAR_RADIUS - bounds.minX) / cell));
+      const z0 = Math.max(0, Math.ceil((b.z - b.rz - AVATAR_RADIUS - bounds.minZ) / cell));
+      const z1 = Math.min(rows - 1, Math.floor((b.z + b.rz + AVATAR_RADIUS - bounds.minZ) / cell));
+      for (let iz = z0; iz <= z1; iz += 1) for (let ix = x0; ix <= x1; ix += 1) blocked[iz * cols + ix] = 1;
+    }
+    gridCache.set(blockers, blocked);
+  }
+  const grid = blocked;
+  const isBlocked = (ix: number, iz: number) => ix < 0 || iz < 0 || ix >= cols || iz >= rows || grid[iz * cols + ix] === 1;
+  const nearestFree = (x: number, z: number) => {
+    const cx = THREE.MathUtils.clamp(Math.round((x - bounds.minX) / cell), 0, cols - 1);
+    const cz = THREE.MathUtils.clamp(Math.round((z - bounds.minZ) / cell), 0, rows - 1);
+    if (!isBlocked(cx, cz)) return { ix: cx, iz: cz };
+    for (let r = 1; r <= 12; r += 1) {
+      for (let dz = -r; dz <= r; dz += 1) {
+        for (let dx = -r; dx <= r; dx += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          if (!isBlocked(cx + dx, cz + dz)) return { ix: cx + dx, iz: cz + dz };
+        }
+      }
+    }
+    return null;
+  };
+  const start = nearestFree(sx, sz), goal = nearestFree(gx, gz);
+  if (!start || !goal) return [];
+  const si = start.iz * cols + start.ix, gi = goal.iz * cols + goal.ix;
+  const point = (i: number) => new THREE.Vector3(bounds.minX + (i % cols) * cell, 0, bounds.minZ + Math.floor(i / cols) * cell);
+  if (si === gi) return [new THREE.Vector3(gx, 0, gz)];
+  const g = new Float64Array(total).fill(Infinity);
+  const parent = new Int32Array(total).fill(-1);
+  const closed = new Uint8Array(total);
+  const heap: { i: number; f: number }[] = [];
+  const push = (i: number, f: number) => {
+    heap.push({ i, f });
+    let k = heap.length - 1;
+    while (k > 0) { const p = (k - 1) >> 1; if (heap[p].f <= f) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; }
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop()!;
+    if (heap.length) {
+      heap[0] = last;
+      let k = 0;
+      for (;;) {
+        const l = k * 2 + 1, r = l + 1;
+        let m = k;
+        if (l < heap.length && heap[l].f < heap[m].f) m = l;
+        if (r < heap.length && heap[r].f < heap[m].f) m = r;
+        if (m === k) break;
+        [heap[m], heap[k]] = [heap[k], heap[m]];
+        k = m;
+      }
+    }
+    return top.i;
+  };
+  const h = (ix: number, iz: number) => { const dx = Math.abs(ix - goal.ix), dz = Math.abs(iz - goal.iz); return Math.max(dx, dz) + 0.414 * Math.min(dx, dz); };
+  g[si] = 0;
+  push(si, h(start.ix, start.iz));
+  let found = false;
+  while (heap.length) {
+    const cur = pop();
+    if (closed[cur]) continue;
+    if (cur === gi) { found = true; break; }
+    closed[cur] = 1;
+    const ix = cur % cols, iz = Math.floor(cur / cols);
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (!dx && !dz) continue;
+        const nx = ix + dx, nz = iz + dz;
+        if (isBlocked(nx, nz)) continue;
+        if (dx && dz && (isBlocked(ix + dx, iz) || isBlocked(ix, iz + dz))) continue;
+        const ni = nz * cols + nx;
+        const cost = g[cur] + (dx && dz ? Math.SQRT2 : 1);
+        if (cost < g[ni]) { g[ni] = cost; parent[ni] = cur; push(ni, cost + h(nx, nz)); }
+      }
+    }
+  }
+  if (!found) return [];
+  const cells: number[] = [];
+  for (let c = gi; c !== si && c >= 0; c = parent[c]) cells.push(c);
+  cells.reverse();
+  const pts = cells.map(point);
+  // String-pull: keep only points where direction changes.
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i < pts.length; i += 1) {
+    const prev = i === 0 ? new THREE.Vector3(sx, 0, sz) : pts[i - 1];
+    const next = pts[i + 1];
+    if (!next) { out.push(pts[i]); break; }
+    const d1 = pts[i].clone().sub(prev).normalize(), d2 = next.clone().sub(pts[i]).normalize();
+    if (d1.dot(d2) < 0.999) out.push(pts[i]);
+  }
+  if (out.length) out[out.length - 1] = new THREE.Vector3(gx, 0, gz).distanceTo(out[out.length - 1]) < 0.8 ? new THREE.Vector3(gx, 0, gz) : out[out.length - 1];
+  return out;
+};
 
 export default function ImmersiveAvatarScene({ displayName }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const gesture = useRef<'idle' | 'dip' | 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | 'sit' | 'stand' | 'kneel'>('idle');
-  const gestureAt = useRef(0);
+  const apiRef = useRef<Api | null>(null);
+  const [notice, setNotice] = useState('바닥을 클릭하거나 WASD·조이스틱으로 이동하고, 아래 동작을 선택하세요.');
   const [nearFont, setNearFont] = useState(false);
-  const [step, setStep] = useState<'water' | 'cross' | 'done'>('water');
-  const [nearMary, setNearMary] = useState(false);
-  const [actionNotice, setActionNotice] = useState('클릭한 바닥으로 이동하거나 하단 동작을 선택하세요.');
-  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    setStep('water');
-    setNearFont(false);
-    gesture.current = 'idle';
-  }, []);
+  const [fontStep, setFontStep] = useState<'water' | 'cross' | 'done'>('water');
+  const [joystick, setJoystick] = useState({ x: 0, y: 0 });
+  const [state, setState] = useState({ veil: false, sitting: false, praying: false, rosary: false });
+  const [candlePicker, setCandlePicker] = useState(false);
+  const [confession, setConfession] = useState<'off' | 'writing' | 'released'>('off');
+  const [confessionText, setConfessionText] = useState('');
+  const [releasedText, setReleasedText] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#8f9b91');
-    scene.fog = new THREE.Fog('#8f9b91', 42, 105);
-
-    const camera = new THREE.PerspectiveCamera(64, host.clientWidth / Math.max(1, host.clientHeight), 0.1, 220);
-    const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
     renderer.setSize(host.clientWidth, host.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.02;
+    renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor('#8f9b91', 1);
     host.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight('#eee3cf', '#343b32', 1.55);
+    const scene = new THREE.Scene();
+    const indoorFog = new THREE.Color('#1f1914');
+    const outdoorFog = new THREE.Color('#cdbda0');
+    scene.fog = new THREE.Fog(indoorFog.clone(), 30, 110);
+    const camera = new THREE.PerspectiveCamera(62, host.clientWidth / Math.max(1, host.clientHeight), 0.05, 420);
+
+    const hemi = new THREE.HemisphereLight('#f3e3c6', '#3b3026', 0.6);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight('#f5e2c4', 2.15);
-    sun.position.set(-12, 19, 10);
+    const sun = new THREE.DirectionalLight('#ffdcaa', 2.4);
+    sun.position.set(-40, 45, 70);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -28;
-    sun.shadow.camera.right = 28;
-    sun.shadow.camera.top = 60;
-    sun.shadow.camera.bottom = -40;
-    sun.shadow.bias = -0.0003;
-    scene.add(sun);
-    const fill = new THREE.DirectionalLight('#c4d0c1', 0.58);
-    fill.position.set(12, 9, -18);
-    scene.add(fill);
+    Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 60, bottom: -60, near: 1, far: 220 });
+    sun.shadow.bias = -0.0004;
+    sun.target.position.set(0, 0, 20);
+    scene.add(sun, sun.target);
 
-    const blockers: Blocker[] = [];
-    const addBlocker = (x: number, z: number, rx: number, rz: number) => blockers.push({ x, z, rx, rz });
-    const collides = (x: number, z: number) => blockers.some(b =>
-      Math.abs(x - b.x) < b.rx + 0.36 && Math.abs(z - b.z) < b.rz + 0.36
-    );
+    const site = buildSite(renderer);
+    scene.add(site.group);
+    const avatar = new Avatar({ name: displayName });
+    avatar.root.position.set(site.start.x, 0, site.start.z);
+    avatar.root.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    scene.add(avatar.root);
 
-    const makeNoiseTexture = (base: string, seed: number, repeatX = 1, repeatY = 1) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = base;
-        ctx.fillRect(0, 0, 256, 256);
-        let n = seed >>> 0;
-        const rand = () => {
-          n = (n * 1664525 + 1013904223) >>> 0;
-          return n / 4294967296;
-        };
-        for (let i = 0; i < 4600; i += 1) {
-          const alpha = 0.025 + rand() * 0.095;
-          ctx.fillStyle = rand() > 0.52
-            ? `rgba(255,245,224,${alpha})`
-            : `rgba(20,24,18,${alpha})`;
-          const size = 1 + rand() * 3;
-          ctx.fillRect(rand() * 256, rand() * 256, size, size);
-        }
+    // Sparkle burst used when a candle catches.
+    const sparkN = 40;
+    const sparkPos = new Float32Array(sparkN * 3);
+    const sparkVel = new Float32Array(sparkN * 3);
+    const sparkGeo = new THREE.BufferGeometry();
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+    const sparkTex = glowTexture('rgba(255,250,220,1)', 'rgba(255,190,90,0.5)');
+    const sparkMat = new THREE.PointsMaterial({ size: 0.05, map: sparkTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+    scene.add(new THREE.Points(sparkGeo, sparkMat));
+    let sparkT = -1;
+    const sparkle = (p: THREE.Vector3) => {
+      sparkT = 0;
+      for (let i = 0; i < sparkN; i += 1) {
+        sparkPos.set([p.x, p.y + 0.05, p.z], i * 3);
+        sparkVel.set([(Math.random() - 0.5) * 0.4, 0.3 + Math.random() * 0.8, (Math.random() - 0.5) * 0.4], i * 3);
       }
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(repeatX, repeatY);
-      texture.colorSpace = THREE.SRGBColorSpace;
-      return texture;
     };
 
-    const makeMat = (color: string, roughness = 0.82, metalness = 0, map?: THREE.Texture) =>
-      new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
+    // ----- Movement state -----
+    const collides = (x: number, z: number) => site.blockers.some(b => Math.abs(x - b.x) < b.rx + AVATAR_RADIUS && Math.abs(z - b.z) < b.rz + AVATAR_RADIUS);
+    let route: THREE.Vector3[] = [];
+    let onArrive: (() => void) | null = null;
+    type Glide = { to: THREE.Vector3; yaw?: number; dur: number; t: number; from: THREE.Vector3 };
+    let glides: Glide[] = [];
+    let onGlidesDone: (() => void) | null = null;
+    let seated: { index: number; aisle: THREE.Vector3 } | null = null;
+    let confessing = false;
+    let rosaryCount = 0;
+    let rosaryTimer = 0;
+    let lastNearFont = false;
 
+    const say = (s: string) => setNotice(s);
+    const sync = () => setState({ veil: avatar.veilOn, sitting: avatar.posture === 'sit', praying: avatar.hands === 'prayer', rosary: avatar.hands === 'rosary' });
+    const faceYaw = (yaw: number) => { targetYaw = yaw; };
+    let targetYaw = site.start.yaw;
+    avatar.root.rotation.y = targetYaw;
 
-    // Photo-scanned PBR stone from Poly Haven (CC0) for the cathedral masonry.
-    const textureLoader = new THREE.TextureLoader();
-    textureLoader.setCrossOrigin('anonymous');
-    const stoneColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_diff_2k.jpg');
-    const stoneNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_nor_gl_2k.jpg');
-    const stoneRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_rough_2k.jpg');
-    const loadedTextures: THREE.Texture[] = [stoneColorMap, stoneNormalMap, stoneRoughnessMap];
-    [stoneColorMap, stoneNormalMap, stoneRoughnessMap].forEach(texture => {
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(12, 7);
-    });
-    stoneColorMap.colorSpace = THREE.SRGBColorSpace;
-    // Real cathedral photographs from Wikimedia Commons, served from /public so they always load.
-    // Hotlinking Commons failed in browsers: Special:FilePath redirects carry no CORS header (WebGL
-    // refuses the texture), non-standard thumbnail widths return 400, and repeated loads hit 429.
-    // Licences and authors: public/textures/photos/CREDITS.md (also shown in the on-screen credit line).
-    const cathedralInteriorPhoto = textureLoader.load('/textures/photos/nave.jpg');
-    const maryShrinePhoto = textureLoader.load('/textures/photos/marian-statue.jpg');
-    const marbleFloorPhoto = textureLoader.load('/textures/photos/marble-floor.jpg');
-    const vaultedCeilingPhoto = textureLoader.load('/textures/photos/vaulted-ceiling.jpg');
-    const exteriorFacadePhoto = textureLoader.load('/textures/photos/facade.jpg');
-    const courtyardPhoto = textureLoader.load('/textures/photos/courtyard.jpg');
-    for (const texture of [cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto, courtyardPhoto]) {
-      texture.colorSpace = THREE.SRGBColorSpace;
-    }
-    loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto, courtyardPhoto);
-
-    const woodColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_diff_2k.jpg');
-    const woodNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_nor_gl_2k.jpg');
-    const woodRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_rough_2k.jpg');
-    loadedTextures.push(woodColorMap, woodNormalMap, woodRoughnessMap);
-    [woodColorMap, woodNormalMap, woodRoughnessMap].forEach(texture => {
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(2.5, 1.5);
-    });
-    woodColorMap.colorSpace = THREE.SRGBColorSpace;
-
-
-    const plaster = makeMat('#d7d0c0', 0.94, 0, makeNoiseTexture('#d7d0c0', 2, 4, 3));
-    const darkPlaster = makeMat('#938d80', 0.94, 0, makeNoiseTexture('#938d80', 4, 3, 2));
-    const darkStone = makeMat('#53564e', 0.91, 0, makeNoiseTexture('#53564e', 18, 3, 2));
-    const floorStone = makeMat('#ffffff', 0.88, 0, marbleFloorPhoto);
-    marbleFloorPhoto.wrapS = marbleFloorPhoto.wrapT = THREE.ClampToEdgeWrapping;
-    marbleFloorPhoto.center.set(0.5, 0.5);
-    marbleFloorPhoto.rotation = Math.PI / 2;
-    marbleFloorPhoto.repeat.set(1, 1);
-    const aisleStone = makeMat('#a28a67', 0.78, 0, makeNoiseTexture('#a28a67', 8, 2, 12));
-    const trim = makeMat('#b49a6b', 0.42, 0.42);
-    const wood = makeMat('#523d2b', 0.7, 0, makeNoiseTexture('#523d2b', 10, 3, 2));
-    const darkWood = makeMat('#33271f', 0.78, 0);
-    for (const material of [wood, darkWood]) {
-      material.map = woodColorMap;
-      material.normalMap = woodNormalMap;
-      material.roughnessMap = woodRoughnessMap;
-      material.needsUpdate = true;
-    }
-    const ivory = makeMat('#e5dac3', 0.78, 0);
-    const stone = makeMat('#aaa28f', 0.86, 0);
-    for (const material of [plaster, darkPlaster, darkStone, stone]) {
-      material.map = stoneColorMap;
-      material.normalMap = stoneNormalMap;
-      material.roughnessMap = stoneRoughnessMap;
-      material.needsUpdate = true;
-    }
-    const greenery = makeMat('#58724c', 0.96, 0, makeNoiseTexture('#58724c', 12, 2, 2));
-    const grassMat = makeMat('#687e58', 0.98, 0, makeNoiseTexture('#687e58', 14, 20, 20));
-    const pathMat = makeMat('#b9af99', 0.92, 0, makeNoiseTexture('#b9af99', 16, 6, 20));
-    const skin = makeMat('#d3a17f', 0.72, 0);
-    const coat = makeMat('#c8bdab', 0.88, 0);
-    const coatShadow = makeMat('#a99d89', 0.86, 0);
-    const hair = makeMat('#292321', 0.9, 0);
-    const trousers = makeMat('#373d3e', 0.86, 0);
-    const shoes = makeMat('#202527', 0.8, 0);
-    const bag = makeMat('#554c40', 0.9, 0);
-
-    const addMesh = (
-      parent: THREE.Object3D,
-      geometry: THREE.BufferGeometry,
-      material: THREE.Material,
-      x: number,
-      y: number,
-      z: number,
-      castShadow = true,
-      receiveShadow = true,
-    ) => {
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = castShadow;
-      mesh.receiveShadow = receiveShadow;
-      parent.add(mesh);
-      return mesh;
+    const goTo = (x: number, z: number, arrive: (() => void) | null, label?: string) => {
+      const path = findPath(site.blockers, site.bounds, avatar.root.position.x, avatar.root.position.z, x, z);
+      if (!path.length) { say('그곳으로 가는 길을 찾지 못했어요. 조금 이동한 뒤 다시 시도해 주세요.'); return false; }
+      route = path;
+      onArrive = arrive;
+      if (label) say(label);
+      return true;
     };
-    const addBox = (parent: THREE.Object3D, w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number, blocker = false) => {
-      const mesh = addMesh(parent, new THREE.BoxGeometry(w, h, d), material, x, y, z);
-      if (blocker) addBlocker(x, z, w / 2, d / 2);
-      return mesh;
+    const glide = (steps: { x: number; z: number; yaw?: number; dur: number }[], done: (() => void) | null) => {
+      glides = steps.map(s => ({ to: new THREE.Vector3(s.x, 0, s.z), yaw: s.yaw, dur: s.dur, t: 0, from: new THREE.Vector3() }));
+      if (glides[0]) glides[0].from.copy(avatar.root.position);
+      onGlidesDone = done;
     };
-    const addCylinder = (parent: THREE.Object3D, rt: number, rb: number, h: number, material: THREE.Material, x: number, y: number, z: number, segments = 18, blocker = false) => {
-      const mesh = addMesh(parent, new THREE.CylinderGeometry(rt, rb, h, segments), material, x, y, z);
-      if (blocker) addBlocker(x, z, Math.max(rt, rb), Math.max(rt, rb));
-      return mesh;
+    /** Leave a pew, prie-dieu or kneel before starting something else; then run `next`. */
+    const getUp = (next?: () => void) => {
+      if (seated) {
+        const aisle = seated.aisle;
+        seated = null;
+        avatar.setPosture('stand');
+        glide([{ x: avatar.root.position.x, z: aisle.z, dur: 0.6 }, { x: aisle.x, z: aisle.z, dur: 0.9 }], () => { sync(); next?.(); });
+        return true;
+      }
+      if (avatar.posture !== 'stand') {
+        avatar.setPosture('stand');
+        avatar.setHands('rest');
+        sync();
+        window.setTimeout(() => next?.(), 600);
+        return true;
+      }
+      return false;
     };
-    const addGroundPlane = (parent: THREE.Object3D, width: number, depth: number, material: THREE.Material, x: number, y: number, z: number) => {
-      const mesh = addMesh(parent, new THREE.PlaneGeometry(width, depth), material, x, y, z, false, true);
-      mesh.rotation.x = -Math.PI / 2;
-      return mesh;
+    const cancelRoutes = () => { route = []; onArrive = null; };
+
+    // ----- Actions -----
+    const act = (a: Action) => {
+      if (confessing && a !== 'cross' && a !== 'prayer') { say('고해소 안에 있습니다. 마친 뒤 이용해 주세요.'); return; }
+      if (a === 'cross') {
+        avatar.play('cross', { onDone: () => say('성부와 성자와 성령의 이름으로. 아멘.') });
+        say('이마 → 가슴 → 왼쪽 어깨 → 오른쪽 어깨 순서로 성호를 긋습니다.');
+        return;
+      }
+      if (a === 'prayer') {
+        const on = avatar.hands !== 'prayer';
+        avatar.setHands(on ? 'prayer' : 'rest');
+        rosaryCount = 0;
+        say(on ? '두 손을 모으고 조용히 기도합니다. 다시 누르면 손을 내립니다.' : '기도를 마쳤습니다.');
+        sync();
+        return;
+      }
+      if (a === 'rosary') {
+        const on = avatar.hands !== 'rosary';
+        avatar.setHands(on ? 'rosary' : 'rest');
+        rosaryCount = 0;
+        rosaryTimer = 0;
+        say(on ? '묵주기도를 시작합니다. 한 알씩 넘기며 기도해요.' : '묵주기도를 마쳤습니다.');
+        sync();
+        return;
+      }
+      if (a === 'bow') { avatar.play('bow'); say('정중하게 고개 숙여 절합니다.'); return; }
+      if (a === 'greet') { avatar.play('greet'); say('손을 들어 인사합니다.'); return; }
+      if (a === 'veil') {
+        const putOn = !avatar.veilOn;
+        avatar.play(putOn ? 'veilOn' : 'veilOff', { onDone: () => { sync(); say(putOn ? '미사보를 썼습니다.' : '미사보를 벗었습니다.'); } });
+        say(putOn ? '두 손으로 미사보를 펼쳐 머리에 씁니다.' : '미사보를 조심스럽게 벗습니다.');
+        return;
+      }
+      if (a === 'seat') {
+        if (seated) { getUp(() => say('자리에서 일어났습니다.')); say('자리에서 일어납니다.'); return; }
+        const used = new Set<number>();
+        const pos = avatar.root.position;
+        const best = site.seats
+          .map((s, i) => ({ s, i, d: Math.hypot(s.x - pos.x, s.z - pos.z) }))
+          .filter(o => !used.has(o.i))
+          .sort((p, q) => p.d - q.d)[0];
+        if (!best) return;
+        const aisle = new THREE.Vector3(best.s.aisleX, 0, best.s.z - 0.72);
+        getUp();
+        avatar.setHands('rest');
+        goTo(aisle.x, aisle.z, () => {
+          glide([
+            { x: best.s.x, z: aisle.z, yaw: 0, dur: 0.4 + Math.abs(best.s.x - aisle.x) * 0.45 },
+            { x: best.s.x, z: best.s.z, yaw: 0, dur: 0.7 },
+          ], () => {
+            seated = { index: best.i, aisle };
+            avatar.setPosture('sit', 0.48);
+            say('신자석에 앉았습니다. 기도하기·묵주기도·미사보도 앉은 채로 할 수 있어요.');
+            sync();
+          });
+        }, '가까운 신자석으로 갑니다.');
+        return;
+      }
+      if (a === 'mary') {
+        const pos = avatar.root.position;
+        const inside = site.indoorAt(pos.x, pos.z) > 0.5;
+        const spot = inside ? site.maryInside : site.grotto;
+        const start = () => goTo(spot.x, spot.z, () => {
+          faceYaw(spot.yaw);
+          avatar.setPosture('kneel');
+          avatar.setHands('prayer');
+          say(inside ? '성모님 앞 기도대에 무릎을 꿇고 기도합니다.' : '성모 동굴 앞에 무릎을 꿇고 기도합니다.');
+          sync();
+        }, inside ? '성당 안 성모 제대로 갑니다.' : '정원의 성모 동굴로 갑니다.');
+        if (!getUp(start)) start();
+        return;
+      }
+      if (a === 'candle') {
+        const go = () => goTo(site.candleStand.approach.x, site.candleStand.approach.z, () => {
+          faceYaw(site.candleStand.approach.yaw);
+          setCandlePicker(true);
+          say('어떤 마음으로 초를 봉헌할까요?');
+        }, '성모 제대 앞 봉헌초대로 갑니다.');
+        avatar.setHands('rest');
+        if (!getUp(go)) go();
+        return;
+      }
+      if (a === 'confess') {
+        const cf = site.confessional;
+        const go = () => goTo(cf.approach.x, cf.approach.z, () => {
+          faceYaw(cf.approach.yaw);
+          confessing = true;
+          glide([{ x: cf.inside.x, z: cf.approach.z, yaw: Math.PI / 2, dur: 1.1 }, { x: cf.inside.x, z: cf.inside.z, yaw: cf.inside.yaw, dur: 0.6 }], () => {
+            cf.setCurtain(true);
+            avatar.setPosture('kneel');
+            avatar.setHands('prayer');
+            setConfession('writing');
+            say('고해소 안입니다. 마음에 있는 것을 적고 내려놓으세요.');
+            sync();
+          });
+        }, '고해소로 갑니다.');
+        avatar.setHands('rest');
+        if (!getUp(go)) go();
+      }
     };
-
-    // One continuous site: nave, entrance threshold, courtyard, and garden.
-    const world = new THREE.Group();
-    scene.add(world);
-
-    // Outside ground begins before the threshold and continues well into the garden.
-    addGroundPlane(world, 60, 100, grassMat, 0, -0.24, 38);
-    addGroundPlane(world, 29.0, 42, floorStone, 0, -0.1, -1);
-    // One continuous high-resolution marble photograph replaces the repeated procedural floor tiles.
-    addGroundPlane(world, 3.4, 40, aisleStone, 0, -0.045, -1);
-    addGroundPlane(world, 5.4, 48, pathMat, 0, -0.035, 39);
-
-    // CHURCH: long nave, side aisles, side walls and vaulted ceiling.
-    addBox(world, 29.0, 0.65, 42, darkPlaster, 0, 22.15, -1);
-    const ceilingPhotoMaterial = new THREE.MeshStandardMaterial({
-      map: vaultedCeilingPhoto,
-      roughness: 0.96,
-      side: THREE.DoubleSide,
-    });
-    const ceilingPhotoPlane = addMesh(world, new THREE.PlaneGeometry(28.4, 41.2), ceilingPhotoMaterial, 0, 21.79, -1, false, false);
-    ceilingPhotoPlane.rotation.x = Math.PI / 2;
-    addBox(world, 0.8, 21.6, 42, plaster, -14.4, 10.8, -1, true);
-    addBox(world, 0.8, 21.6, 42, plaster, 14.4, 10.8, -1, true);
-    addBox(world, 29.0, 21.6, 0.8, plaster, 0, 10.8, -22, true);
-    // The front wall has a real open doorway; there is no invisible wall across the threshold.
-    addBox(world, 11.5, 21.6, 0.8, plaster, -8.65, 10.8, 19.5, true);
-    addBox(world, 11.5, 21.6, 0.8, plaster, 8.65, 10.8, 19.5, true);
-    addBox(world, 6.5, 3.0, 0.8, plaster, 0, 20.2, 19.5);
-    for (const x of [-2.9, 2.9]) {
-      addCylinder(world, 0.58, 0.64, 20.8, ivory, x, 10.4, 19.15, 24, true);
-      addBox(world, 1.35, 0.42, 1.25, trim, x, 21.0, 19.15);
-    }
-
-
-    // Real cathedral facade photograph as the distant exterior vista beyond the garden.
-    const exteriorFacadeMaterial = new THREE.MeshStandardMaterial({
-      map: exteriorFacadePhoto,
-      roughness: 0.94,
-      side: THREE.DoubleSide,
-    });
-    const exteriorFacadeBackdrop = addMesh(world, new THREE.PlaneGeometry(46, 32), exteriorFacadeMaterial, 0, 16, 75, false, false);
-    const courtyardPhotoMaterial = new THREE.MeshStandardMaterial({
-      map: courtyardPhoto,
-      roughness: 1,
-      side: THREE.DoubleSide,
-    });
-    const courtyardPhotoBackdrop = addMesh(
-      world,
-      new THREE.PlaneGeometry(34, 18),
-      courtyardPhotoMaterial,
-      21.5,
-      8.8,
-      43,
-      false,
-      false,
-    );
-    courtyardPhotoBackdrop.rotation.y = -Math.PI / 2;
-
-    // Monumental west facade: rose window and twin towers inspired by the great French Gothic cathedrals.
-    const roseWindow = new THREE.Group();
-    roseWindow.position.set(0, 14.7, 19.04);
-    world.add(roseWindow);
-    const roseGlass = new THREE.Mesh(
-      new THREE.CircleGeometry(3.05, 64),
-      new THREE.MeshStandardMaterial({
-        color: '#8c9ec0',
-        emissive: '#455879',
-        emissiveIntensity: 0.42,
-        roughness: 0.24,
-        metalness: 0.08,
-        transparent: true,
-        opacity: 0.94,
-        side: THREE.DoubleSide,
-      })
-    );
-    roseWindow.add(roseGlass);
-    for (const radius of [1.15, 2.05, 2.9]) {
-      const traceryRing = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.085, 10, 64), trim);
-      roseWindow.add(traceryRing);
-    }
-    for (let i = 0; i < 12; i += 1) {
-      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.075, 5.75, 0.09), trim);
-      spoke.rotation.z = (Math.PI * 2 * i) / 12;
-      roseWindow.add(spoke);
-    }
-    const roseBoss = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 14), trim);
-    roseBoss.position.z = 0.08;
-    roseWindow.add(roseBoss);
-
-    for (const side of [-1, 1]) {
-      const towerX = side * 11.35;
-      addBox(world, 5.65, 22.0, 5.4, darkStone, towerX, 11.0, 22.5);
-      addBox(world, 5.95, 0.55, 5.7, trim, towerX, 22.0, 22.5);
-      for (const offset of [-2.45, 2.45]) {
-        addBox(world, 0.28, 22.5, 0.28, trim, towerX + offset, 11.25, 22.5);
-      }
-      const towerLouver = addMesh(
-        world,
-        new THREE.PlaneGeometry(1.85, 5.0),
-        new THREE.MeshStandardMaterial({
-          color: '#59758a',
-          emissive: '#38536b',
-          emissiveIntensity: 0.34,
-          transparent: true,
-          opacity: 0.92,
-          side: THREE.DoubleSide,
-        }),
-        towerX,
-        15.6,
-        19.76,
-        false,
-        false
-      );
-      towerLouver.rotation.y = Math.PI;
-      const spire = new THREE.Mesh(new THREE.ConeGeometry(3.35, 12.0, 8), darkWood);
-      spire.position.set(towerX, 29.0, 22.5);
-      spire.castShadow = true;
-      world.add(spire);
-      addBox(world, 0.2, 2.8, 0.2, trim, towerX, 36.2, 22.5);
-      addBox(world, 1.45, 0.18, 0.18, trim, towerX, 36.8, 22.5);
-      addBlocker(towerX, 22.5, 2.95, 2.85);
-    }
-
-    // Flying buttresses give the outer nave the stepped silhouette of a monumental Gothic basilica.
-    for (const side of [-1, 1]) {
-      for (const z of [-14, -5, 4, 13]) {
-        addBox(world, 0.85, 18.2, 1.1, stone, side * 18.0, 9.1, z, true);
-        const diagonal = addBox(world, 0.72, 12.0, 1.0, ivory, side * 16.2, 12.3, z);
-        diagonal.rotation.z = -side * 0.26;
-        addBox(world, 2.1, 0.45, 1.65, trim, side * 18.0, 18.5, z);
-      }
-    }
-
-    // Open wooden entrance doors on their hinges, so the garden reads as the next space.
-    const leftDoor = new THREE.Group();
-    leftDoor.position.set(-2.9, 0, 19.5);
-    leftDoor.rotation.y = -0.92;
-    world.add(leftDoor);
-    addBox(leftDoor, 2.75, 8.8, 0.22, wood, -1.34, 4.4, 0);
-    for (const y of [1.4, 4.4, 7.4]) addBox(leftDoor, 2.55, 0.1, 0.28, trim, -1.34, y, 0);
-    const rightDoor = new THREE.Group();
-    rightDoor.position.set(2.9, 0, 19.5);
-    rightDoor.rotation.y = 0.92;
-    world.add(rightDoor);
-    addBox(rightDoor, 2.75, 8.8, 0.22, wood, 1.34, 4.4, 0);
-    for (const y of [1.4, 4.4, 7.4]) addBox(rightDoor, 2.55, 0.1, 0.28, trim, 1.34, y, 0);
-
-    // A high stone vault, rib arches and heavy piers.
-    for (const x of [-11.2, -7.5, 7.5, 11.2]) {
-      for (const z of [-17, -11, -5, 1, 7, 13]) {
-        addCylinder(world, 0.38, 0.48, 20.6, ivory, x, 10.3, z, 22, true);
-        addCylinder(world, 0.68, 0.68, 0.42, trim, x, 20.85, z, 22);
-        addBox(world, 1.15, 0.24, 1.15, trim, x, 21.15, z);
-      }
-    }
-    for (const z of [-17, -11, -5, 1, 7, 13]) {
-      const pointedArch = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-6.2, 7.2, z),
-        new THREE.Vector3(-5.5, 13.4, z),
-        new THREE.Vector3(-3.7, 18.7, z),
-        new THREE.Vector3(0, 21.45, z),
-        new THREE.Vector3(3.7, 18.7, z),
-        new THREE.Vector3(5.5, 13.4, z),
-        new THREE.Vector3(6.2, 7.2, z),
-      ]);
-      const rib = new THREE.Mesh(new THREE.TubeGeometry(pointedArch, 88, 0.2, 12, false), trim);
-      rib.castShadow = true;
-      world.add(rib);
-    }
-    // Longitudinal ribs join the pointed arches into a high Gothic vault.
-    for (const x of [-5.8, 0, 5.8]) {
-      const vaultRib = new THREE.Mesh(
-        new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-          new THREE.Vector3(x, x === 0 ? 21.45 : 12.0, -19),
-          new THREE.Vector3(x, x === 0 ? 21.45 : 18.0, -10),
-          new THREE.Vector3(x, x === 0 ? 21.45 : 21.0, 0),
-          new THREE.Vector3(x, x === 0 ? 21.45 : 18.0, 10),
-          new THREE.Vector3(x, x === 0 ? 21.45 : 12.0, 17),
-        ]), 80, 0.16, 10, false), trim
-      );
-      world.add(vaultRib);
-    }
-
-    // Stained glass panels: jewel tones with lead divisions.
-    const glassColors = ['#547d8e', '#bd805f', '#d5b76f', '#6e927e', '#947f9f', '#d1c18b'];
-    for (const side of [-1, 1]) {
-      for (const z of [-15, -8, -1, 6, 13]) {
-        const x = side * 14.02;
-        const glassMat = new THREE.MeshStandardMaterial({
-          color: glassColors[(Math.abs(z) + (side > 0 ? 2 : 0)) % glassColors.length],
-          roughness: 0.24,
-          metalness: 0.08,
-          emissive: glassColors[(Math.abs(z) + (side > 0 ? 2 : 0)) % glassColors.length],
-          emissiveIntensity: 0.24,
-          transparent: true,
-          opacity: 0.86,
-          side: THREE.DoubleSide,
-        });
-        const panel = addMesh(world, new THREE.PlaneGeometry(2.2, 4.6), glassMat, x, 5.7, z, false, false);
-        panel.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        for (const dz of [-1, 0, 1]) addBox(world, 0.11, 4.7, 0.1, trim, x - side * 0.08, 5.7, z + dz * 0.9);
-        addBox(world, 0.12, 4.0, 2.1, darkWood, x - side * 0.11, 5.7, z);
-      }
-    }
-
-
-    // Clerestory: a second, much higher band of stained glass pours colored light into the nave.
-    for (const side of [-1, 1]) {
-      for (const z of [-15, -8, -1, 6, 13]) {
-        const x = side * 14.02;
-        const color = glassColors[(Math.abs(z) + (side > 0 ? 3 : 1)) % glassColors.length];
-        const highGlass = new THREE.MeshStandardMaterial({
-          color,
-          emissive: color,
-          emissiveIntensity: 0.3,
-          roughness: 0.2,
-          metalness: 0.06,
-          transparent: true,
-          opacity: 0.9,
-          side: THREE.DoubleSide,
-        });
-        const clerestory = addMesh(world, new THREE.PlaneGeometry(2.15, 6.4), highGlass, x, 15.0, z, false, false);
-        clerestory.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        for (const offset of [-1.05, 1.05]) {
-          addBox(world, 0.12, 6.55, 0.12, trim, x - side * 0.08, 15.0, z + offset);
-        }
-        addBox(world, 0.12, 0.12, 2.2, trim, x - side * 0.08, 15.0, z);
-      }
-    }
-
-    // Fourteen Stations of the Cross: seven framed relief panels on each side.
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 7; i += 1) {
-        const z = -16 + i * 4.8;
-        const x = side * 13.55;
-        addBox(world, 0.12, 1.55, 1.18, darkWood, x, 3.05, z);
-        addBox(world, 0.08, 1.3, 0.92, trim, x - side * 0.08, 3.05, z);
-        addBox(world, 0.06, 1.05, 0.68, stone, x - side * 0.14, 3.05, z);
-        addBox(world, 0.08, 0.62, 0.075, trim, x - side * 0.2, 3.28, z);
-        addBox(world, 0.08, 0.08, 0.38, trim, x - side * 0.2, 3.36, z);
-        addMesh(world, new THREE.SphereGeometry(0.18, 12, 10), darkWood, x - side * 0.2, 2.9, z, false, false);
-      }
-    }
-
-    // SANCTUARY: raised chancel, altar, crucifix, tabernacle, ambo and presider's chair.
-    addBox(world, 12.2, 0.35, 6.0, trim, 0, 0.18, -17.1);
-    addBox(world, 11.7, 0.22, 5.55, ivory, 0, 0.42, -17.1);
-    addBox(world, 5.2, 0.48, 1.85, trim, 0, 1.1, -15.8);
-    addBox(world, 4.9, 0.96, 1.62, ivory, 0, 0.58, -15.8);
-    addBox(world, 2.1, 1.85, 1.25, wood, 0, 2.45, -18.7);
-    // Tabernacle set behind the altar, beneath the sanctuary cross.
-    addBox(world, 1.45, 1.25, 0.82, trim, 0, 3.95, -19.8);
-    addBox(world, 1.12, 0.82, 0.62, ivory, 0, 3.95, -19.25);
-    addMesh(world, new THREE.SphereGeometry(0.48, 20, 14), trim, 0, 4.72, -19.25);
-    // Monumental crucifix with a sculpted corpus at the visual center of the sanctuary.
-    addBox(world, 0.34, 8.4, 0.24, darkWood, 0, 8.5, -21.05);
-    addBox(world, 3.25, 0.34, 0.26, darkWood, 0, 10.15, -21.05);
-    const corpusSkin = makeMat('#c6a18b', 0.72, 0.02);
-    const corpusHair = makeMat('#342a26', 0.9);
-    const corpusBody = addMesh(world, new THREE.CapsuleGeometry(0.28, 1.02, 6, 14), corpusSkin, 0, 8.45, -20.72);
-    corpusBody.scale.set(0.82, 1.0, 0.52);
-    addMesh(world, new THREE.SphereGeometry(0.22, 18, 14), corpusSkin, 0, 9.45, -20.70);
-    addMesh(world, new THREE.SphereGeometry(0.235, 18, 12), corpusHair, 0, 9.55, -20.76).scale.set(1, 0.55, 0.9);
-    const corpusLeftArm = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.88, 5, 10), corpusSkin, -0.78, 9.02, -20.72);
-    corpusLeftArm.rotation.z = Math.PI / 2;
-    const corpusRightArm = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.88, 5, 10), corpusSkin, 0.78, 9.02, -20.72);
-    corpusRightArm.rotation.z = -Math.PI / 2;
-    const corpusLeftLeg = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.62, 5, 10), corpusSkin, -0.13, 7.35, -20.71);
-    corpusLeftLeg.rotation.z = -0.08;
-    const corpusRightLeg = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.62, 5, 10), corpusSkin, 0.13, 7.35, -20.71);
-    corpusRightLeg.rotation.z = 0.08;
-    addMesh(world, new THREE.TorusGeometry(0.28, 0.025, 8, 32), trim, 0, 9.55, -20.62).rotation.x = Math.PI / 2;
-    addBlocker(0, -17.1, 6.1, 3.0);
-    const sanctuaryLamp = new THREE.PointLight('#ff5b3d', 0.9, 5, 2);
-    sanctuaryLamp.position.set(1.25, 3.4, -18.8);
-    world.add(sanctuaryLamp);
-    const sanctuaryGlow = new THREE.PointLight('#f4d9ad', 1.35, 19, 2);
-    sanctuaryGlow.position.set(0, 8.2, -15.2);
-    world.add(sanctuaryGlow);
-    // Ambo / pulpit with a book.
-    addBox(world, 0.95, 1.25, 0.78, wood, -3.4, 0.82, -14.6, true);
-    addBox(world, 1.08, 0.12, 0.88, trim, -3.4, 1.5, -14.6);
-    const lectern = addBox(world, 0.76, 0.08, 0.52, ivory, -3.4, 1.62, -14.55);
-    lectern.rotation.x = -0.18;
-    // Priest's chair and two minister seats.
-    addBox(world, 0.95, 1.65, 0.8, wood, 3.35, 1.0, -15.0, true);
-    addBox(world, 1.15, 0.18, 0.92, trim, 3.35, 1.92, -15.0);
-    for (const x of [2.1, 4.6]) addBox(world, 0.72, 0.82, 0.62, wood, x, 0.55, -13.9, true);
-
-    // Congregation seating and central aisle.
-    for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
-      for (const x of [-4.25, 4.25]) {
-        addBox(world, 3.55, 0.22, 0.58, wood, x, 0.82, z);
-        addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42);
-        for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z);
-        // The backrest blocks passage; the raised seat surface remains available for sitting.
-        addBlocker(x, z + 0.42, 1.8, 0.02);
-      }
-    }
-
-    // Baptismal font close to the main entrance.
-    const holyFont = new THREE.Group();
-    holyFont.name = 'holy-water-font';
-    holyFont.position.set(-2.2, 0, 12.0);
-    world.add(holyFont);
-    addCylinder(holyFont, 0.5, 0.58, 0.2, trim, 0, 0.1, 0, 28);
-    addCylinder(holyFont, 0.2, 0.29, 0.95, stone, 0, 0.65, 0, 20);
-    addCylinder(holyFont, 0.55, 0.34, 0.3, ivory, 0, 1.25, 0, 32);
-    const fontRim = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.055, 12, 36), trim);
-    fontRim.rotation.x = Math.PI / 2;
-    fontRim.position.y = 1.42;
-    holyFont.add(fontRim);
-    const waterSurface = addMesh(holyFont, new THREE.CircleGeometry(0.43, 32), new THREE.MeshStandardMaterial({ color: '#8dbbb7', roughness: 0.16, metalness: 0.28, emissive: '#315d59', emissiveIntensity: 0.25 }), 0, 1.405, 0, false, false);
-    waterSurface.rotation.x = -Math.PI / 2;
-    const fontHalo = new THREE.Mesh(new THREE.TorusGeometry(0.76, 0.025, 8, 40), new THREE.MeshBasicMaterial({ color: '#eed6a4', transparent: true, opacity: 0.38 }));
-    fontHalo.rotation.x = Math.PI / 2;
-    fontHalo.position.y = 0.035;
-    holyFont.add(fontHalo);
-    const fontLight = new THREE.PointLight('#c8e8dc', 1.3, 4.5, 2);
-    fontLight.position.set(0, 1.7, 0);
-    holyFont.add(fontLight);
-    addBlocker(-2.2, 12, 0.8, 0.8);
-
-    // Side confessionals, kneelers and small prayer alcoves.
-    for (const side of [-1, 1]) {
-      const x = side * 12.4;
-      addBox(world, 2.3, 2.8, 1.45, darkWood, x, 1.4, 7.4, true);
-      addBox(world, 1.1, 1.7, 0.08, wood, x, 1.65, 6.65);
-      addBox(world, 0.72, 1.0, 0.05, trim, x, 1.65, 6.58);
-      addBox(world, 0.95, 0.08, 0.08, trim, x, 2.2, 6.54);
-      addBox(world, 1.6, 0.18, 0.52, wood, x, 0.72, 4.6, true);
-      const alcoveLight = new THREE.PointLight('#edc98c', 0.5, 4);
-      alcoveLight.position.set(x, 2.3, 5.4);
-      world.add(alcoveLight);
-    }
-
-    // Choir stalls and organ loft near the entrance end of the nave.
-    addBox(world, 8.0, 0.35, 2.0, darkWood, 0, 6.0, 15.0);
-    addBox(world, 8.2, 0.16, 0.35, trim, 0, 6.25, 14.1);
-    for (let x = -3.1; x <= 3.1; x += 1.05) {
-      addBox(world, 0.16, 1.55, 0.18, darkWood, x, 6.95, 14.2);
-    }
-    addBox(world, 2.6, 2.1, 0.5, wood, 0, 4.8, 15.7);
-    for (let x = -0.9; x <= 0.9; x += 0.3) addCylinder(world, 0.055, 0.055, 1.45, trim, x, 5.25, 15.35, 10);
-
-    // COURTYARD: a real exterior zone directly beyond the open church doors.
-    // Paving stones continue from the nave into the courtyard; no menu or teleport is used.
-    for (let z = 20; z <= 54; z += 2.3) {
-      for (let x = -2; x <= 2; x += 1.25) {
-        addMesh(world, new THREE.BoxGeometry(1.18, 0.05, 2.15), pathMat, x, -0.005, z, false, true);
-      }
-    }
-    // Low cloister arcades frame the garden on both sides of the path.
-    for (const side of [-1, 1]) {
-      const x = side * 13.5;
-      for (let z = 25; z <= 50; z += 5) {
-        if (!(side === 1 && z === 50)) {
-          addBox(world, 0.65, 4.2, 0.65, stone, x, 2.1, z, true);
-        }
-        addBox(world, 4.5, 0.3, 0.6, trim, x - side * 1.8, 4.35, z);
-      }
-      // Leave a clear opening in the east cloister wall so the Marian grotto is visible.
-      addBox(world, 0.6, 4.1, 22, plaster, side * 15.9, 2.05, 33, true);
-      addBox(world, 0.6, 4.1, 8, plaster, side * 15.9, 2.05, 58, true);
-    }
-
-    // Garden beds, trees, flower borders, benches and lamps.
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 5; i += 1) {
-        const x = side * (7.6 + (i % 2) * 2.4);
-        const z = 25 + i * 6.1;
-        addBox(world, 3.5, 0.35, 3.0, darkStone, x, 0.16, z);
-        addBox(world, 3.3, 0.16, 2.8, greenery, x, 0.38, z);
-        addBlocker(x, z, 1.75, 1.5);
-        for (let k = 0; k < 14; k += 1) {
-          const px = x + ((k % 4) - 1.5) * 0.6;
-          const pz = z + (Math.floor(k / 4) - 1.5) * 0.55;
-          const flowerColor = ['#e3c4b7', '#e9d59d', '#d1c4df', '#fff0de'][k % 4];
-          addMesh(world, new THREE.SphereGeometry(0.14, 10, 8), makeMat(flowerColor, 0.8), px, 0.72, pz, false, false);
-        }
-        addCylinder(world, 0.22, 0.32, 3.6, makeMat('#67513a'), side * (10.8 + (i % 2) * 1.1), 1.8, z, 12, true);
-        const treeX = side * (10.8 + (i % 2) * 1.1);
-        addBlocker(treeX, z, 1.55, 1.55);
-        for (let layer = 0; layer < 3; layer += 1) {
-          const crown = addMesh(world, new THREE.IcosahedronGeometry(1.65 - layer * 0.12, 1), makeMat(layer === 1 ? '#58774f' : '#6d895f', 0.98), treeX + (layer % 2 ? 0.22 : -0.12), 3.0 + layer * 0.72, z, true, true);
-          crown.scale.set(1.1, 0.95, 1.05);
-        }
-      }
-    }
-    // Garden fountain; its basin is visible from the main threshold.
-    const fountain = new THREE.Group();
-    fountain.position.set(3.8, 0, 39.5);
-    world.add(fountain);
-    addCylinder(fountain, 2.05, 2.3, 0.55, stone, 0, 0.28, 0, 40);
-    addCylinder(fountain, 1.78, 1.78, 0.08, makeMat('#7ca7a2', 0.18, 0.2), 0, 0.59, 0, 40);
-    addCylinder(fountain, 0.24, 0.34, 1.38, trim, 0, 1.25, 0, 20);
-    const fountainWater = addMesh(fountain, new THREE.SphereGeometry(0.3, 18, 14), makeMat('#a6cfca', 0.18, 0.15), 0, 2.05, 0, false, false);
-    const fountainLight = new THREE.PointLight('#b9dfd5', 1.5, 7, 2);
-    fountainLight.position.set(0, 2.4, 0);
-    fountain.add(fountainLight);
-    addBlocker(3.8, 39.5, 2.25, 2.25);
-
-    // Marian grotto: a continuous path leads to a dedicated 3D prayer alcove.
-    for (let x = 4; x <= 16; x += 2) {
-      addMesh(world, new THREE.BoxGeometry(1.85, 0.055, 2.05), pathMat, x, 0.015, 49.5, false, true);
-    }
-
-    const maryGrotto = new THREE.Group();
-    maryGrotto.position.set(16.4, 0, 49.5);
-    world.add(maryGrotto);
-    // Open-front rocky alcove facing the path: back, side returns, roof and stone plinth.
-    addBox(maryGrotto, 0.7, 4.2, 3.65, darkStone, 0.85, 2.1, 0);
-    addBox(maryGrotto, 2.45, 4.2, 0.55, darkStone, -0.08, 2.1, -1.55);
-    addBox(maryGrotto, 2.45, 4.2, 0.55, darkStone, -0.08, 2.1, 1.55);
-    addBox(maryGrotto, 2.45, 0.48, 3.65, darkStone, -0.08, 4.0, 0);
-    addBox(maryGrotto, 2.45, 0.3, 3.65, darkStone, -0.08, 0.15, 0);
-    addBox(maryGrotto, 2.7, 0.22, 3.85, trim, -0.1, 4.25, 0);
-
-    // Real Lourdes statue photograph is recessed behind a dimensional statue and arch.
-    const maryImage = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.2, 2.65),
-      new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.96, side: THREE.DoubleSide })
-    );
-    maryImage.position.set(0.35, 2.55, 0);
-    maryImage.rotation.y = -Math.PI / 2;
-    maryGrotto.add(maryImage);
-
-    // Volumetric Marian sculpture: carved robe, blue mantle, veil, face and joined hands.
-    const maryStatue = new THREE.Group();
-    maryStatue.position.set(-0.82, 0, 0);
-    maryStatue.rotation.y = Math.PI / 2;
-    maryGrotto.add(maryStatue);
-    const statueIvory = makeMat('#eee9de', 0.74, 0.02);
-    const statueBlue = makeMat('#526f9d', 0.78, 0.02);
-    const statueSkin = makeMat('#d7b99e', 0.8);
-    const robeProfile = [
-      new THREE.Vector2(0.16, 0), new THREE.Vector2(0.22, 0.12),
-      new THREE.Vector2(0.34, 0.52), new THREE.Vector2(0.42, 1.05),
-      new THREE.Vector2(0.34, 1.55), new THREE.Vector2(0.25, 1.92),
-      new THREE.Vector2(0.18, 2.08),
-    ];
-    addMesh(maryStatue, new THREE.LatheGeometry(robeProfile, 28), statueIvory, 0, 0.45, 0);
-    const mantle = addMesh(maryStatue, new THREE.SphereGeometry(0.43, 22, 16), statueBlue, 0, 2.15, 0.02);
-    mantle.scale.set(1.05, 1.12, 0.76);
-    const veil = addMesh(maryStatue, new THREE.SphereGeometry(0.32, 22, 16), statueIvory, 0, 2.83, 0.02);
-    veil.scale.set(1.0, 1.3, 0.92);
-    const face = addMesh(maryStatue, new THREE.SphereGeometry(0.2, 20, 16), statueSkin, 0, 2.91, -0.02);
-    face.scale.set(0.88, 1.15, 0.78);
-    const sash = addMesh(maryStatue, new THREE.BoxGeometry(0.12, 1.25, 0.08), makeMat('#9db4ce', 0.55), 0.18, 1.78, -0.24);
-    sash.rotation.z = -0.16;
-    const maryLeftArm = addMesh(maryStatue, new THREE.CapsuleGeometry(0.075, 0.58, 4, 10), statueBlue, -0.32, 2.15, -0.02);
-    maryLeftArm.rotation.z = -0.58;
-    const maryRightArm = addMesh(maryStatue, new THREE.CapsuleGeometry(0.075, 0.58, 4, 10), statueBlue, 0.32, 2.15, -0.02);
-    maryRightArm.rotation.z = 0.58;
-    addMesh(maryStatue, new THREE.SphereGeometry(0.085, 14, 12), statueSkin, -0.06, 1.94, -0.3);
-    addMesh(maryStatue, new THREE.SphereGeometry(0.085, 14, 12), statueSkin, 0.06, 1.94, -0.3);
-    addMesh(maryStatue, new THREE.ConeGeometry(0.07, 0.32, 10), trim, 0, 3.22, 0.02);
-
-    // Carved stone frame around the image and statue, open to the west.
-    addBox(maryGrotto, 0.15, 2.6, 0.16, trim, -1.28, 2.5, -1.0);
-    addBox(maryGrotto, 0.15, 2.6, 0.16, trim, -1.28, 2.5, 1.0);
-    const maryArchCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-1.28, 3.72, -1.08),
-      new THREE.Vector3(-1.28, 4.05, -0.9),
-      new THREE.Vector3(-1.28, 4.28, -0.48),
-      new THREE.Vector3(-1.28, 4.36, 0),
-      new THREE.Vector3(-1.28, 4.28, 0.48),
-      new THREE.Vector3(-1.28, 4.05, 0.9),
-      new THREE.Vector3(-1.28, 3.72, 1.08),
-    ]);
-    maryGrotto.add(new THREE.Mesh(new THREE.TubeGeometry(maryArchCurve, 48, 0.12, 10, false), trim));
-    for (const z of [-1.2, 1.2]) {
-      addCylinder(maryGrotto, 0.12, 0.2, 1.2, darkWood, -1.05, 0.62, z, 12);
-      addCylinder(maryGrotto, 0.12, 0.12, 0.38, ivory, -1.05, 1.42, z, 16);
-      addMesh(maryGrotto, new THREE.ConeGeometry(0.075, 0.22, 10), makeMat('#f4ce82', 0.35, 0.05), -1.05, 1.72, z, false, false);
-      const candleGlow = new THREE.PointLight('#ffcf88', 0.5, 2.8, 2);
-      candleGlow.position.set(-1.05, 1.9, z);
-      maryGrotto.add(candleGlow);
-    }
-    // Kneeler faces the statue, leaving clear space between the path and the grotto.
-    addBox(maryGrotto, 0.62, 0.18, 1.55, wood, -2.05, 0.62, 0);
-    addBox(maryGrotto, 0.16, 0.72, 1.55, wood, -2.28, 0.98, 0);
-    // A readable sign and warm beacon make the shrine easy to spot from the central path.
-    const marySignCanvas = document.createElement('canvas');
-    marySignCanvas.width = 512;
-    marySignCanvas.height = 128;
-    const marySignContext = marySignCanvas.getContext('2d');
-    if (marySignContext) {
-      marySignContext.fillStyle = 'rgba(27, 30, 26, 0.88)';
-      marySignContext.beginPath();
-      marySignContext.roundRect(8, 8, 496, 112, 22);
-      marySignContext.fill();
-      marySignContext.strokeStyle = '#d9bd83';
-      marySignContext.lineWidth = 4;
-      marySignContext.stroke();
-      marySignContext.textAlign = 'center';
-      marySignContext.textBaseline = 'middle';
-      marySignContext.fillStyle = '#f3e7cf';
-      marySignContext.font = 'bold 38px serif';
-      marySignContext.fillText('성모 마리아 기도처', 256, 49);
-      marySignContext.fillStyle = '#d9bd83';
-      marySignContext.font = '22px sans-serif';
-      marySignContext.fillText('MARY SHRINE', 256, 91);
-    }
-    const marySignTexture = new THREE.CanvasTexture(marySignCanvas);
-    marySignTexture.colorSpace = THREE.SRGBColorSpace;
-    const marySign = new THREE.Sprite(new THREE.SpriteMaterial({ map: marySignTexture, transparent: true, depthWrite: false }));
-    marySign.scale.set(2.55, 0.64, 1);
-    marySign.position.set(14.15, 5.05, 49.5);
-    world.add(marySign);
-    const maryBeacon = new THREE.PointLight('#f4d39b', 1.0, 7.5, 2);
-    maryBeacon.position.set(14.15, 4.0, 49.5);
-    world.add(maryBeacon);
-
-    addBlocker(16.4, 49.5, 1.75, 1.2);
-    addBlocker(14.35, 49.5, 0.2, 0.95);
-
-    // A real cathedral photograph is presented as a framed architectural reference panel
-    // mounted on the side-aisle wall, integrated into the surrounding 3D masonry.
-    // Large real nave photograph on the sanctuary rear wall; 3D altar and crucifix remain in front.
-    const cathedralPhotoPanel = new THREE.Mesh(
-      new THREE.PlaneGeometry(13.8, 10.6),
-      new THREE.MeshStandardMaterial({ map: cathedralInteriorPhoto, roughness: 0.96, side: THREE.DoubleSide })
-    );
-    cathedralPhotoPanel.position.set(0, 9.2, -21.54);
-    world.add(cathedralPhotoPanel);
-
-    // Wooden benches and warm low garden lamps.
-    for (const x of [-6.7, 7.1]) {
-      addBox(world, 2.2, 0.18, 0.62, wood, x, 0.75, 33.2, true);
-      addBox(world, 2.2, 0.82, 0.14, wood, x, 1.18, 33.5, true);
-      const lantern = new THREE.Group();
-      lantern.position.set(x, 0, 28.5);
-      world.add(lantern);
-      addBlocker(x, 28.5, 0.25, 0.25);
-      addCylinder(lantern, 0.15, 0.2, 1.55, darkWood, 0, 0.78, 0, 12);
-      const lampGlass = addMesh(lantern, new THREE.SphereGeometry(0.19, 12, 10), new THREE.MeshBasicMaterial({ color: '#ffdf9d' }), 0, 1.65, 0, false, false);
-      lampGlass.scale.y = 1.3;
-      const lamp = new THREE.PointLight('#ffcf88', 0.8, 5, 2);
-      lamp.position.set(0, 1.8, 0);
-      lantern.add(lamp);
-      addBlocker(x, 33.2, 1.25, 0.8);
-    }
-
-    // Low grass and flower island define the open walking space without boxing it in.
-    const island = addMesh(world, new THREE.SphereGeometry(1, 20, 12), greenery, -7.2, 0.32, 45, false, true);
-    island.scale.set(2.2, 0.36, 3.2);
-    addBlocker(-7.2, 45, 2.2, 3.2);
-
-    // A small outdoor chapel is visible farther down the same continuous path.
-    addBox(world, 6.8, 4.8, 4.8, plaster, 0, 2.4, 59, true);
-    const gardenRoof = new THREE.Mesh(new THREE.ConeGeometry(5.2, 3.0, 4), darkWood);
-    gardenRoof.position.set(0, 6.3, 59);
-    gardenRoof.rotation.y = Math.PI / 4;
-    gardenRoof.castShadow = true;
-    world.add(gardenRoof);
-    addBox(world, 0.14, 1.3, 0.12, trim, 0, 8.4, 59);
-    addBox(world, 0.85, 0.14, 0.12, trim, 0, 8.65, 59);
-
-    // Movable 3D avatar, scaled to natural human proportions.
-    const avatar = new THREE.Group();
-    avatar.position.set(0, 0, 8.8);
-    avatar.scale.setScalar(0.72);
-    scene.add(avatar);
-    const avatarPart = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) =>
-      addMesh(avatar, geometry, material, x, y, z);
-    const torso = avatarPart(new THREE.CapsuleGeometry(0.31, 0.66, 5, 12), coat, 0, 1.34, 0);
-    avatarPart(new THREE.CylinderGeometry(0.1, 0.11, 0.18, 12), skin, 0, 1.85, 0);
-    const head = avatarPart(new THREE.SphereGeometry(0.235, 28, 20), skin, 0, 2.08, -0.02);
-    head.scale.set(0.92, 1.08, 0.95);
-    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.58), hair);
-    hairCap.position.set(0, 0.08, 0.03);
-    hairCap.scale.set(1.02, 0.88, 1.03);
-    head.add(hairCap);
-    const facePart = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = true;
-      head.add(mesh);
-      return mesh;
-    };
-    const fringe = facePart(new THREE.SphereGeometry(0.16, 20, 12), hair, 0, 0.17, -0.095);
-    fringe.scale.set(1.08, 0.38, 0.54);
-    const faceWhite = makeMat('#f4eee5', 0.34);
-    const iris = makeMat('#554036', 0.36);
-    const pupil = makeMat('#191a18', 0.26);
-    const lip = makeMat('#986d60', 0.68);
-    for (const side of [-1, 1]) {
-      const eye = facePart(new THREE.SphereGeometry(0.035, 16, 12), faceWhite, side * 0.083, 0.025, -0.198);
-      eye.scale.set(1, 0.62, 0.38);
-      const irisMesh = facePart(new THREE.SphereGeometry(0.018, 14, 10), iris, side * 0.083, 0.024, -0.212);
-      irisMesh.scale.set(0.9, 1, 0.5);
-      facePart(new THREE.SphereGeometry(0.009, 12, 8), pupil, side * 0.083, 0.024, -0.219);
-      const brow = facePart(new THREE.CapsuleGeometry(0.012, 0.055, 3, 8), hair, side * 0.083, 0.078, -0.19);
-      brow.rotation.z = side * -0.1;
-      brow.rotation.x = Math.PI / 2;
-      const ear = facePart(new THREE.SphereGeometry(0.065, 14, 10), skin, side * 0.218, -0.02, 0.015);
-      ear.scale.set(0.38, 0.72, 0.62);
-    }
-    const nose = facePart(new THREE.SphereGeometry(0.038, 14, 10), skin, 0, -0.035, -0.225);
-    nose.scale.set(0.72, 0.9, 0.62);
-    const mouth = facePart(new THREE.SphereGeometry(0.035, 14, 10), lip, 0, -0.09, -0.199);
-    mouth.scale.set(1.0, 0.24, 0.25);
-    avatarPart(new THREE.BoxGeometry(0.42, 0.55, 0.17), bag, 0, 1.33, 0.275);
-
-
-    const makeArm = (x: number, side: -1 | 1) => {
-      const upper = new THREE.Group();
-      upper.position.set(x, 1.64, 0);
-      avatar.add(upper);
-      const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.22, 5, 10), coatShadow);
-      upperArm.position.y = -0.16;
-      upperArm.castShadow = true;
-      upper.add(upperArm);
-      const forearm = new THREE.Group();
-      forearm.position.y = -0.31;
-      upper.add(forearm);
-      const lowerArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.088, 0.25, 5, 10), coatShadow);
-      lowerArm.position.y = -0.16;
-      lowerArm.castShadow = true;
-      forearm.add(lowerArm);
-      const hand = new THREE.Group();
-      hand.position.set(0, -0.32, -0.015);
-      forearm.add(hand);
-      const palm = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), skin);
-      palm.scale.set(0.78, 0.62, 0.42);
-      palm.position.y = -0.025;
-      hand.add(palm);
-      const fingers: THREE.Group[] = [];
-      for (let finger = 0; finger < 4; finger += 1) {
-        const width = (finger - 1.5) * 0.044;
-        const length = [0.13, 0.16, 0.15, 0.12][finger];
-        const joint = new THREE.Group();
-        joint.position.set(width, -0.055, -0.005);
-        hand.add(joint);
-        const digit = new THREE.Mesh(new THREE.CapsuleGeometry(0.019, length, 3, 8), skin);
-        digit.position.y = -length * 0.43;
-        digit.rotation.z = (finger - 1.5) * 0.055;
-        digit.castShadow = true;
-        joint.add(digit);
-        fingers.push(joint);
-      }
-      const thumb = new THREE.Group();
-      thumb.position.set(side * 0.105, -0.055, -0.012);
-      hand.add(thumb);
-      const thumbDigit = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.105, 3, 8), skin);
-      thumbDigit.position.y = -0.055;
-      thumbDigit.rotation.z = side * -0.72;
-      thumbDigit.castShadow = true;
-      thumb.add(thumbDigit);
-      return { upper, forearm, hand, fingers, thumb };
-    };
-    const leftArmRig = makeArm(-0.39, -1);
-    const rightArmRig = makeArm(0.39, 1);
-    const leftArm = leftArmRig.upper;
-    const rightArm = rightArmRig.upper;
-    const leftForearm = leftArmRig.forearm;
-    const rightForearm = rightArmRig.forearm;
-    const leftHand = leftArmRig.hand;
-    const rightHand = rightArmRig.hand;
-    const leftFingers = leftArmRig.fingers;
-    const rightFingers = rightArmRig.fingers;
-    const leftThumb = leftArmRig.thumb;
-    const rightThumb = rightArmRig.thumb;
-
-    const makeLeg = (x: number) => {
-      const hip = new THREE.Group();
-      hip.position.set(x, 0.88, 0);
-      avatar.add(hip);
-      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.3, 5, 10), trousers);
-      thigh.position.y = -0.19;
-      thigh.castShadow = true;
-      hip.add(thigh);
-
-      const knee = new THREE.Group();
-      knee.position.y = -0.39;
-      hip.add(knee);
-      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.27, 5, 10), trousers);
-      shin.position.y = -0.17;
-      shin.castShadow = true;
-      knee.add(shin);
-      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.38), shoes);
-      shoe.position.set(0, -0.34, -0.075);
-      shoe.castShadow = true;
-      knee.add(shoe);
-      return { hip, knee };
-    };
-    const leftLegRig = makeLeg(-0.16);
-    const rightLegRig = makeLeg(0.16);
-    const leftLeg = leftLegRig.hip;
-    const rightLeg = rightLegRig.hip;
-    const leftKnee = leftLegRig.knee;
-    const rightKnee = rightLegRig.knee;
-
-
-    // Small, unobtrusive baptismal-name plaque above the avatar.
-    const labelCanvas = document.createElement('canvas');
-    labelCanvas.width = 512;
-    labelCanvas.height = 96;
-    const labelCtx = labelCanvas.getContext('2d');
-    if (labelCtx) {
-      labelCtx.fillStyle = 'rgba(20, 23, 20, 0.62)';
-      labelCtx.beginPath();
-      labelCtx.roundRect(8, 8, 496, 80, 38);
-      labelCtx.fill();
-      labelCtx.font = '600 38px -apple-system, BlinkMacSystemFont, sans-serif';
-      labelCtx.textAlign = 'center';
-      labelCtx.textBaseline = 'middle';
-      labelCtx.fillStyle = '#f6efdf';
-      labelCtx.fillText(displayName.trim().slice(0, 18) || '순례자', 256, 48, 460);
-    }
-    const labelTexture = new THREE.CanvasTexture(labelCanvas);
-    labelTexture.colorSpace = THREE.SRGBColorSpace;
-    const nameLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, transparent: true, depthWrite: false }));
-    nameLabel.scale.set(0.78, 0.15, 1);
-    nameLabel.position.set(0, 2.72, 0);
-    avatar.add(nameLabel);
-
-    // Five-decade rosary: 50 small beads, five larger decade beads,
-    // three introductory beads, a centerpiece medal and a crucifix.
-    const rosary = new THREE.Group();
-    rosary.position.set(0, 1.32, -0.44);
-    rosary.visible = false;
-    avatar.add(rosary);
-    const rosaryBeadMaterial = new THREE.MeshStandardMaterial({
-      color: '#e6d6bb', roughness: 0.3, metalness: 0.12, emissive: '#493c2a', emissiveIntensity: 0.06,
-    });
-    const rosaryLargeBeadMaterial = new THREE.MeshStandardMaterial({
-      color: '#c8aa72', roughness: 0.28, metalness: 0.48,
-    });
-    const rosaryCordMaterial = makeMat('#6d5a42', 0.85, 0);
-    const ringPoints: THREE.Vector3[] = [];
-    const ringCount = 55; // 50 small Hail Mary beads + five larger decade beads
-    for (let i = 0; i <= ringCount; i += 1) {
-      const angle = (Math.PI * 2 * i) / ringCount;
-      ringPoints.push(new THREE.Vector3(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0));
-    }
-    const ringCurve = new THREE.CatmullRomCurve3(ringPoints);
-    rosary.add(new THREE.Mesh(new THREE.TubeGeometry(ringCurve, 120, 0.012, 6, false), rosaryCordMaterial));
-    for (let i = 0; i < ringCount; i += 1) {
-      const angle = (Math.PI * 2 * i) / ringCount;
-      const bead = new THREE.Mesh(
-        new THREE.SphereGeometry(0.026, 10, 8),
-        i % 11 === 0 ? rosaryLargeBeadMaterial : rosaryBeadMaterial,
-      );
-      bead.position.set(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0);
-      bead.scale.setScalar(i % 11 === 0 ? 1.38 : 1);
-      rosary.add(bead);
-    }
-    for (let i = 0; i < 3; i += 1) {
-      const bead = new THREE.Mesh(new THREE.SphereGeometry(0.027, 10, 8), rosaryBeadMaterial);
-      bead.position.set(0, -0.13 - i * 0.075, 0);
-      rosary.add(bead);
-    }
-    const centerpiece = new THREE.Mesh(
-      new THREE.SphereGeometry(0.055, 14, 10),
-      new THREE.MeshStandardMaterial({ color: '#d6bd8d', roughness: 0.3, metalness: 0.32 }),
-    );
-    centerpiece.position.set(0, -0.39, 0);
-    centerpiece.scale.set(0.78, 1.18, 0.5);
-    rosary.add(centerpiece);
-    const rosaryCross = new THREE.Group();
-    rosaryCross.position.set(0, -0.54, 0);
-    rosary.add(rosaryCross);
-    addMesh(rosaryCross, new THREE.BoxGeometry(0.052, 0.27, 0.035), rosaryLargeBeadMaterial, 0, 0, 0, false, false);
-    addMesh(rosaryCross, new THREE.BoxGeometry(0.18, 0.048, 0.035), rosaryLargeBeadMaterial, 0, 0.055, 0, false, false);
-
-
-
-    // Available seats are reserved locally for the current visitor.
-    const seatSpots: THREE.Vector3[] = [];
-    for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
-      for (const sideX of [-4.25, 4.25]) {
-        for (const offset of [-0.7, 0, 0.7]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z));
-      }
-    }
-    const occupiedSeats = new Set<number>();
-
-    // Collision-aware movement around the architecture and garden furniture.
-    addBlocker(-14.4, -1, 0.4, 21);
-    addBlocker(14.4, -1, 0.4, 21);
-    addBlocker(0, -22, 14.5, 0.4);
-    addBlocker(-8.65, 19.5, 5.8, 0.4);
-    addBlocker(8.65, 19.5, 5.8, 0.4);
-    for (const z of [-17, -11, -5, 1, 7, 13]) {
-      for (const x of [-8.7, -5.8, 5.8, 8.7]) addBlocker(x, z, 0.35, 0.35);
-    }
-
-
-    const keys = new Set<string>();
-    let yaw = 0, pitch = 0.08, cameraDistance = 2.4;
-    let pointerDown = false, pointerMoved = false, pointerTouch = false;
-    let lastX = 0, lastY = 0, downX = 0, downY = 0;
-    let pinchDistance = 0, joystickX = 0, joystickY = 0;
-    let movementTarget: THREE.Vector3 | null = null;
-    let movementPath: THREE.Vector3[] = [];
-    let pendingSeat: number | null = null, currentSeat: number | null = null;
-    let pendingAction: 'prayer' | 'kneel' | null = null;
-    let pendingGesture: 'dip' | 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | null = null;
-    let isSitting = false, frame = 0;
-    let lastNearFont = false, lastNearMary = false;
-    const clock = new THREE.Clock();
-    const cameraTarget = new THREE.Vector3();
-    const lookTarget = new THREE.Vector3();
-    const raycaster = new THREE.Raycaster();
-    const walkPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const worldBounds = { minX: -19.5, maxX: 19.5, minZ: -22.5, maxZ: 66 };
-
-    // Grid A* navigation keeps click-to-move and action destinations out of solid scenery.
-    const findPath = (startX: number, startZ: number, goalX: number, goalZ: number): THREE.Vector3[] => {
-      const cell = 0.75;
-      const minX = worldBounds.minX, minZ = worldBounds.minZ;
-      const cols = Math.ceil((worldBounds.maxX - minX) / cell) + 1;
-      const rows = Math.ceil((worldBounds.maxZ - minZ) / cell) + 1;
-      const total = cols * rows;
-      const toIndex = (ix: number, iz: number) => iz * cols + ix;
-      const coords = (index: number) => ({ ix: index % cols, iz: Math.floor(index / cols) });
-      const pointAt = (ix: number, iz: number) => ({ x: minX + ix * cell, z: minZ + iz * cell });
-      const isBlocked = (ix: number, iz: number) => {
-        if (ix < 0 || iz < 0 || ix >= cols || iz >= rows) return true;
-        const point = pointAt(ix, iz);
-        return collides(point.x, point.z);
-      };
-      const nearestFree = (x: number, z: number) => {
-        const cx = THREE.MathUtils.clamp(Math.round((x - minX) / cell), 0, cols - 1);
-        const cz = THREE.MathUtils.clamp(Math.round((z - minZ) / cell), 0, rows - 1);
-        if (!isBlocked(cx, cz)) return { ix: cx, iz: cz };
-        for (let radius = 1; radius <= 10; radius += 1) {
-          for (let dz = -radius; dz <= radius; dz += 1) {
-            for (let dx = -radius; dx <= radius; dx += 1) {
-              if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
-              if (!isBlocked(cx + dx, cz + dz)) return { ix: cx + dx, iz: cz + dz };
-            }
-          }
-        }
-        return null;
-      };
-      const start = nearestFree(startX, startZ);
-      const goal = nearestFree(goalX, goalZ);
-      if (!start || !goal) return [];
-      const startIndex = toIndex(start.ix, start.iz);
-      const goalIndex = toIndex(goal.ix, goal.iz);
-      if (startIndex === goalIndex) {
-        const goalPoint = pointAt(goal.ix, goal.iz);
-        return [new THREE.Vector3(goalPoint.x, 0, goalPoint.z)];
-      }
-      const gScore = new Float64Array(total);
-      gScore.fill(Number.POSITIVE_INFINITY);
-      const parent = new Int32Array(total);
-      parent.fill(-1);
-      const closed = new Uint8Array(total);
-      const heap: Array<{ index: number; score: number }> = [];
-      const pushHeap = (index: number, score: number) => {
-        let at = heap.length;
-        heap.push({ index, score });
-        while (at > 0) {
-          const parentAt = Math.floor((at - 1) / 2);
-          if (heap[parentAt].score <= score) break;
-          heap[at] = heap[parentAt];
-          at = parentAt;
-        }
-        heap[at] = { index, score };
-      };
-      const popHeap = () => {
-        const first = heap[0];
-        const last = heap.pop();
-        if (heap.length && last) {
-          let at = 0;
-          while (true) {
-            const left = at * 2 + 1, right = left + 1;
-            if (left >= heap.length) break;
-            const child = right < heap.length && heap[right].score < heap[left].score ? right : left;
-            if (heap[child].score >= last.score) break;
-            heap[at] = heap[child];
-            at = child;
-          }
-          heap[at] = last;
-        }
-        return first?.index ?? -1;
-      };
-      const heuristic = (ix: number, iz: number) => {
-        const dx = Math.abs(ix - goal.ix), dz = Math.abs(iz - goal.iz);
-        return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
-      };
-      gScore[startIndex] = 0;
-      pushHeap(startIndex, heuristic(start.ix, start.iz));
-      let found = false;
-      let iterations = 0;
-      while (heap.length && iterations < total * 2) {
-        iterations += 1;
-        const current = popHeap();
-        if (current < 0 || closed[current]) continue;
-        if (current === goalIndex) { found = true; break; }
-        closed[current] = 1;
-        const { ix, iz } = coords(current);
-        for (let dz = -1; dz <= 1; dz += 1) {
-          for (let dx = -1; dx <= 1; dx += 1) {
-            if (dx === 0 && dz === 0) continue;
-            const nx = ix + dx, nz = iz + dz;
-            if (isBlocked(nx, nz)) continue;
-            if (dx !== 0 && dz !== 0 && (isBlocked(ix + dx, iz) || isBlocked(ix, iz + dz))) continue;
-            const next = toIndex(nx, nz);
-            if (closed[next]) continue;
-            const tentative = gScore[current] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1);
-            if (tentative >= gScore[next]) continue;
-            gScore[next] = tentative;
-            parent[next] = current;
-            pushHeap(next, tentative + heuristic(nx, nz));
-          }
-        }
-      }
-      if (!found) return [];
-      const indices: number[] = [];
-      let cursor = goalIndex;
-      while (cursor !== startIndex && cursor >= 0) {
-        indices.push(cursor);
-        cursor = parent[cursor];
-      }
-      indices.reverse();
-      const pathPoints = indices.map(index => {
-        const { ix, iz } = coords(index);
-        const point = pointAt(ix, iz);
-        return new THREE.Vector3(point.x, 0, point.z);
+    const lightCandle = (intention: string) => {
+      setCandlePicker(false);
+      const slot = site.candleStand.freeSlot(avatar.root.position.clone().add(new THREE.Vector3(0, 1, -0.8)));
+      if (slot < 0) { say('모든 자리에 초가 밝혀져 있어요. 잠시 기도하며 머물러 주세요.'); return; }
+      const wick = site.candleStand.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0));
+      avatar.play('light', {
+        target: wick,
+        onCue: () => { site.candleStand.light(slot); sparkle(wick); say(`초가 밝혀졌습니다 · ${intention}`); },
+        onDone: () => { avatar.play('amen', { onDone: () => say(`${intention} 봉헌한 초가 성모님 앞에서 타오르고 있습니다.`) }); },
       });
-      if (pathPoints.length <= 2) return pathPoints;
-      const turns: THREE.Vector3[] = [];
-      let previousDx = Math.sign(pathPoints[0].x - startX);
-      let previousDz = Math.sign(pathPoints[0].z - startZ);
-      for (let i = 1; i < pathPoints.length; i += 1) {
-        const dx = Math.sign(pathPoints[i].x - pathPoints[i - 1].x);
-        const dz = Math.sign(pathPoints[i].z - pathPoints[i - 1].z);
-        if (dx !== previousDx || dz !== previousDz) turns.push(pathPoints[i - 1]);
-        previousDx = dx;
-        previousDz = dz;
-      }
-      turns.push(pathPoints[pathPoints.length - 1]);
-      return turns;
+      say('불붙이개로 초에 불을 옮깁니다…');
     };
+    const finishConfession = () => {
+      site.confessional.release();
+      setConfession('released');
+      say('적은 마음이 빛이 되어 올라갑니다. 이 글은 기기 밖으로 보내지거나 저장되지 않습니다.');
+    };
+    const leaveConfession = () => {
+      const cf = site.confessional;
+      setConfession('off');
+      avatar.setPosture('stand');
+      avatar.setHands('rest');
+      cf.setCurtain(false);
+      window.setTimeout(() => {
+        glide([{ x: cf.inside.x, z: cf.approach.z, yaw: -Math.PI / 2, dur: 0.6 }, { x: cf.approach.x, z: cf.approach.z, yaw: -Math.PI / 2, dur: 1.0 }], () => {
+          confessing = false;
+          sync();
+          say('평화를 빕니다. 실제 고해성사는 사제와 함께 드립니다.');
+        });
+      }, 700);
+    };
+    const dip = () => {
+      avatar.play('dip', { onDone: () => say('성수를 찍었습니다. 이어서 성호를 그어 보세요.') });
+    };
+    apiRef.current = { act, dip, lightCandle, finishConfession, leaveConfession };
+    // Development-only hook for automated visual checks (teleport and camera placement).
+    if (process.env.NODE_ENV !== 'production') {
+      (window as unknown as { __religion?: unknown }).__religion = {
+        act, lightCandle, finishConfession, leaveConfession, dip,
+        teleport: (x: number, z: number, y = 0) => { avatar.root.position.set(x, 0, z); targetYaw = y; avatar.root.rotation.y = y; route = []; },
+        view: (vy: number, vp: number, vd: number) => { yaw = vy; pitch = vp; dist = vd; },
+        avatar,
+        site,
+        advance: (sec: number) => { for (let t = 0; t < sec; t += 1 / 60) { avatar.update(1 / 60, false); site.update(t, 1 / 60, 1); } },
+      };
+    }
 
-    const setRoute = (goalX: number, goalZ: number) => {
-      const route = findPath(avatar.position.x, avatar.position.z, goalX, goalZ);
-      movementTarget = route[0] ?? null;
-      movementPath = route.slice(1);
-      return route.length > 0;
+    // ----- Input -----
+    const keys = new Set<string>();
+    let yaw = site.start.yaw, pitch = 0.05, dist = 2.7;
+    let joyX = 0, joyY = 0;
+    let down = false, moved = false, touch = false, lastX = 0, lastY = 0, downX = 0, downY = 0, pinch = 0;
+    const raycaster = new THREE.Raycaster();
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const clickMove = (cx: number, cy: number) => {
+      if (confessing) return;
+      const r = host.getBoundingClientRect();
+      raycaster.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -(((cy - r.top) / r.height) * 2 - 1)), camera);
+      const p = raycaster.ray.intersectPlane(ground, new THREE.Vector3());
+      if (!p) return;
+      avatar.setHands('rest');
+      const go = () => goTo(p.x, p.z, null, '목표 지점으로 이동합니다.');
+      if (!getUp(go)) go();
+      sync();
     };
-
-    const standUp = () => {
-      if (currentSeat !== null) occupiedSeats.delete(currentSeat);
-      currentSeat = null;
-      isSitting = false;
-      gesture.current = 'stand';
-      gestureAt.current = performance.now();
-      rosary.visible = false;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if ((e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys.add(k); e.preventDefault(); }
     };
-    const setWalkTarget = (clientX: number, clientY: number) => {
-      const wasSitting = isSitting;
-      if (wasSitting) standUp();
-      const rect = host.getBoundingClientRect();
-      const ndc = new THREE.Vector2(((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
-        -(((clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1));
-      raycaster.setFromCamera(ndc, camera);
-      const point = raycaster.ray.intersectPlane(walkPlane, new THREE.Vector3());
-      if (!point) return;
-      const goalX = THREE.MathUtils.clamp(point.x, worldBounds.minX, worldBounds.maxX);
-      const goalZ = THREE.MathUtils.clamp(point.z, worldBounds.minZ, worldBounds.maxZ);
-      setRoute(goalX, goalZ);
-      pendingSeat = null;
-      pendingAction = null;
-      pendingGesture = null;
-      if (!wasSitting) gesture.current = 'idle';
-      rosary.visible = false;
-      setActionNotice('목표 지점으로 이동합니다.');
+    const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
+    const onBlur = () => { keys.clear(); joyX = joyY = 0; };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' && e.button !== 0) return;
+      down = true; moved = false; touch = e.pointerType === 'touch';
+      try { host.setPointerCapture(e.pointerId); } catch { /* unsupported */ }
+      downX = lastX = e.clientX; downY = lastY = e.clientY;
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) {
-        keys.add(key);
-        event.preventDefault();
+    const onPointerMove = (e: PointerEvent) => {
+      if (!down) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 7) moved = true;
+      if (moved) {
+        yaw += (e.clientX - lastX) * (touch ? 0.009 : 0.0072);
+        pitch = THREE.MathUtils.clamp(pitch + (e.clientY - lastY) * (touch ? 0.006 : 0.0055), -0.45, 1.25);
       }
+      lastX = e.clientX; lastY = e.clientY;
     };
-    const onKeyUp = (event: KeyboardEvent) => keys.delete(event.key.toLowerCase());
-    const onBlur = () => { keys.clear(); joystickX = 0; joystickY = 0; };
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType !== 'touch' && event.button !== 0) return;
-      pointerDown = true;
-      pointerMoved = false;
-      pointerTouch = event.pointerType === 'touch';
-      try { host.setPointerCapture(event.pointerId); } catch { /* Pointer capture can be unavailable on older browsers. */ }
-      downX = lastX = event.clientX;
-      downY = lastY = event.clientY;
+    const onPointerUp = (e: PointerEvent) => {
+      if (!down) return;
+      if (!moved) clickMove(e.clientX, e.clientY);
+      down = false;
     };
-    const onPointerMove = (event: PointerEvent) => {
-      if (!pointerDown) return;
-      const dx = event.clientX - lastX, dy = event.clientY - lastY;
-      if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) pointerMoved = true;
-      if (pointerMoved) {
-        yaw += dx * (pointerTouch ? 0.009 : 0.0075);
-        // Dragging downward raises the avatar's view toward the vault; the camera never dips below the floor.
-        pitch = THREE.MathUtils.clamp(pitch + dy * (pointerTouch ? 0.0065 : 0.0058), -0.34, 1.22);
-      }
-      lastX = event.clientX; lastY = event.clientY;
+    const onWheel = (e: WheelEvent) => { e.preventDefault(); dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.004, 1.2, 9); };
+    const onTouchStart = (e: TouchEvent) => { if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      e.preventDefault();
+      const n = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (pinch) dist = THREE.MathUtils.clamp(dist + (pinch - n) * 0.012, 1.2, 9);
+      pinch = n;
     };
-    const onPointerUp = (event: PointerEvent) => {
-      if (!pointerDown) return;
-      if (!pointerMoved) setWalkTarget(event.clientX, event.clientY);
-      pointerDown = false; pointerMoved = false; pointerTouch = false;
-    };
-    const onJoystick = (event: Event) => {
-      const detail = (event as CustomEvent<{x:number;y:number}>).detail;
-      joystickX = THREE.MathUtils.clamp(detail?.x ?? 0, -1, 1);
-      joystickY = THREE.MathUtils.clamp(detail?.y ?? 0, -1, 1);
-      if (Math.abs(joystickX) + Math.abs(joystickY) > 0.08) {
-        if (isSitting) standUp();
-        movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
-      }
-    };
-    const onWorldAction = (event: Event) => {
-      const action = (event as CustomEvent<string>).detail;
-      if (action === 'seat') {
-        if (isSitting) { standUp(); setActionNotice('자리에서 일어났습니다.'); return; }
-        const free = seatSpots.map((position,index)=>({position,index,distance:Math.hypot(avatar.position.x-position.x,avatar.position.z-position.z)}))
-          .filter(item=>!occupiedSeats.has(item.index) && !collides(item.position.x,item.position.z)).sort((a,b)=>a.distance-b.distance);
-        if (!free.length) { setActionNotice('비어 있는 자리가 없습니다.'); return; }
-        pendingSeat = free[0].index;
-        pendingAction = null;
-        pendingGesture = null;
-        const routed = setRoute(free[0].position.x, free[0].position.z);
-        if (!routed) { pendingSeat = null; setActionNotice('자리까지 이동할 수 있는 통로를 찾지 못했습니다.'); return; }
-        gesture.current = 'idle'; rosary.visible = false;
-        setActionNotice('가장 가까운 빈자리를 찾아 이동합니다.');
-        return;
-      }
-      if (action === 'mary') {
-        const wasSitting = isSitting;
-        if (wasSitting) standUp();
-        pendingSeat = null; pendingGesture = null; pendingAction = 'kneel';
-        const routed = setRoute(13.15, 49.5);
-        if (!routed) {
-          pendingAction = null;
-          setActionNotice('성모상까지 이어지는 통로를 찾지 못했습니다.');
-          return;
-        }
-        if (!wasSitting) gesture.current = 'idle';
-        rosary.visible = false;
-        setActionNotice('정원에 있는 성모 마리아 기도처로 이동합니다.');
-        return;
-      }
-      if (action === 'rosary') {
-        if (gesture.current === 'rosary') {
-          pendingGesture = null;
-          gesture.current = 'idle'; rosary.visible = false;
-          setActionNotice('묵주기도를 마쳤습니다.');
-        } else {
-          if (isSitting) {
-            standUp();
-            pendingGesture = 'rosary';
-            setActionNotice('천천히 일어난 뒤 묵주기도를 시작합니다.');
-            return;
-          }
-          if (gesture.current === 'kneel') {
-            avatar.position.y = 0;
-            leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
-            leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
-          }
-          movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
-          gesture.current = 'rosary'; gestureAt.current = performance.now();
-          rosary.visible = true;
-          setActionNotice('50개의 작은 묵주알과 다섯 개의 큰 묵주알을 따라 기도합니다. 다시 누르면 마칩니다.');
-        }
-        return;
-      }
-      if (action === 'prayer' && gesture.current === 'prayer') {
-        gesture.current = 'idle';
-        setActionNotice('기도를 마쳤습니다.');
-        return;
-      }
-      if (isSitting) {
-        standUp();
-        pendingGesture = ['dip','cross','prayer','bow','greet'].includes(action)
-          ? action as 'dip' | 'cross' | 'prayer' | 'bow' | 'greet'
-          : null;
-        setActionNotice('먼저 자리에서 천천히 일어납니다.');
-        return;
-      }
-      if (gesture.current === 'kneel') {
-        avatar.position.y = 0;
-        leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
-        leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
-      }
-      movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
-      rosary.visible = false;
-      if (['dip','cross','prayer','bow','greet'].includes(action)) {
-        gesture.current = action as 'dip'|'cross'|'prayer'|'bow'|'greet';
-        gestureAt.current = performance.now();
-        const messages: Record<string,string> = {
-          dip:'성수에 손을 적시고 성호를 그을 준비를 합니다.',
-          cross:'이마 → 가슴 → 왼쪽 어깨 → 오른쪽 어깨 순서로 성호경을 긋습니다.',
-          prayer:'두 손을 모아 기도합니다.',
-          bow:'정중하게 목례합니다.',
-          greet:'손을 들어 인사합니다.'
-        };
-        setActionNotice(messages[action]);
-      }
-    };
-    const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 2) {
-        pinchDistance = Math.hypot(
-          event.touches[0].clientX - event.touches[1].clientX,
-          event.touches[0].clientY - event.touches[1].clientY,
-        );
-      }
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      if (event.touches.length === 2) {
-        event.preventDefault();
-        const next = Math.hypot(
-          event.touches[0].clientX - event.touches[1].clientX,
-          event.touches[0].clientY - event.touches[1].clientY,
-        );
-        if (pinchDistance > 0) cameraDistance = THREE.MathUtils.clamp(cameraDistance + (pinchDistance - next) * 0.018, 2.2, 15.0);
-        pinchDistance = next;
-      }
-    };
-    const onTouchEnd = () => { pinchDistance = 0; };
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.008, 2.2, 15.0);
+    const onTouchEnd = () => { pinch = 0; };
+    const onJoystick = (e: Event) => {
+      const d = (e as CustomEvent<{ x: number; y: number }>).detail;
+      joyX = THREE.MathUtils.clamp(d?.x ?? 0, -1, 1);
+      joyY = THREE.MathUtils.clamp(d?.y ?? 0, -1, 1);
     };
     const onResize = () => {
       camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
@@ -1343,403 +470,293 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('resize', onResize);
     window.addEventListener('religion:joystick', onJoystick as EventListener);
-    window.addEventListener('religion:action', onWorldAction as EventListener);
     host.addEventListener('pointerdown', onPointerDown);
     host.addEventListener('pointermove', onPointerMove);
+    host.addEventListener('wheel', onWheel, { passive: false });
     host.addEventListener('touchstart', onTouchStart, { passive: true });
     host.addEventListener('touchmove', onTouchMove, { passive: false });
     host.addEventListener('touchend', onTouchEnd);
-    host.addEventListener('wheel', onWheel, { passive: false });
 
+    // ----- Frame loop -----
+    const clock = new THREE.Clock();
+    const camPos = new THREE.Vector3(site.start.x, 1.7, site.start.z + 3);
+    const camLook = new THREE.Vector3();
+    const tmpV = new THREE.Vector3();
+    let indoor = 1;
+    let frame = 0;
+    let firstFrame = true;
     const animate = () => {
       frame = requestAnimationFrame(animate);
-      const delta = Math.min(clock.getDelta(), 0.04);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const time = clock.elapsedTime;
+      const pos = avatar.root.position;
 
-      const keyboardForward = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
-      const keyboardSideways = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
-      const forward = keyboardForward - joystickY;
-      const sideways = keyboardSideways + joystickX;
-      const manualMoving = Math.abs(forward) + Math.abs(sideways) > 0.08;
-      const oldX = avatar.position.x, oldZ = avatar.position.z;
-      let moveX = 0, moveZ = 0, moving = false;
-      if (manualMoving) {
-        movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
-        if (isSitting) {
-          standUp();
-        } else if (gesture.current !== 'idle' && gesture.current !== 'stand') {
-          gesture.current = 'idle';
-          avatar.position.y = 0;
-          torso.rotation.x = 0;
-          leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
-          leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
-          rosary.visible = false;
-        }
-        const length = Math.hypot(forward, sideways) || 1;
-        const f = forward / length, side = sideways / length;
-        moveX = Math.sin(yaw) * f + Math.cos(yaw) * side;
-        moveZ = -Math.cos(yaw) * f + Math.sin(yaw) * side;
-        moving = true;
-      } else if (movementTarget && !isSitting) {
-        const diffX = movementTarget.x - oldX, diffZ = movementTarget.z - oldZ;
-        const distance = Math.hypot(diffX,diffZ);
-        if (distance > 0.34) {
-          moveX = diffX / distance; moveZ = diffZ / distance; moving = true;
+      const fwd = ((keys.has('w') || keys.has('arrowup')) ? 1 : 0) - ((keys.has('s') || keys.has('arrowdown')) ? 1 : 0) - joyY;
+      const side = ((keys.has('d') || keys.has('arrowright')) ? 1 : 0) - ((keys.has('a') || keys.has('arrowleft')) ? 1 : 0) + joyX;
+      const manual = Math.abs(fwd) + Math.abs(side) > 0.08 && !confessing;
+      let mx = 0, mz = 0, moving = false, speed = 1;
+      if (manual && !glides.length) {
+        if (avatar.posture !== 'stand' || seated) {
+          if (!seated) { avatar.setPosture('stand'); sync(); }
+          else getUp();
         } else {
-          movementTarget = null;
-          if (movementPath.length > 0) {
-            movementTarget = movementPath.shift() ?? null;
-          } else if (pendingSeat !== null) {
-            const index = pendingSeat, seat = seatSpots[index];
-            occupiedSeats.add(index); currentSeat = index; pendingSeat = null;
-            avatar.position.set(seat.x,0,seat.z);
-            avatar.rotation.y = 0; yaw = 0; isSitting = true;
-            gesture.current = 'sit'; gestureAt.current = performance.now();
-            setActionNotice('가까운 빈자리에 앉았습니다. 이동하면 천천히 일어납니다.');
-          } else if (pendingAction) {
-            const completedAction = pendingAction;
-            pendingAction = null;
-            avatar.rotation.y = Math.PI / 2;
-            yaw = Math.PI / 2;
-            gesture.current = completedAction;
-            gestureAt.current = performance.now();
-            setActionNotice(completedAction === 'kneel'
-              ? '성모님 앞에 무릎을 꿇고 기도합니다.'
-              : '성모님 앞에서 두 손을 모아 기도합니다.');
-          }
+          cancelRoutes();
+          if (avatar.hands !== 'rest') { avatar.setHands('rest'); sync(); }
+          if (avatar.currentGesture === 'light') avatar.cancelGesture();
+          const l = Math.hypot(fwd, side) || 1;
+          const f = fwd / l, s = side / l;
+          mx = Math.sin(yaw) * f + Math.cos(yaw) * s;
+          mz = -Math.cos(yaw) * f + Math.sin(yaw) * s;
+          moving = true;
+          speed = Math.min(1, Math.hypot(fwd, side));
+        }
+      } else if (glides.length) {
+        const gl = glides[0];
+        gl.t += dt;
+        const u = Math.min(1, gl.t / gl.dur);
+        const e = u * u * (3 - 2 * u);
+        pos.lerpVectors(gl.from, gl.to, e);
+        if (gl.yaw !== undefined) targetYaw = gl.yaw;
+        else if (gl.to.distanceTo(gl.from) > 0.05) targetYaw = Math.atan2(gl.to.x - gl.from.x, -(gl.to.z - gl.from.z));
+        moving = u < 1 && avatar.posture === 'stand';
+        speed = 0.6;
+        if (u >= 1) {
+          glides.shift();
+          if (glides[0]) glides[0].from.copy(pos);
+          else { const d = onGlidesDone; onGlidesDone = null; d?.(); }
+        }
+      } else if (route.length && avatar.posture === 'stand') {
+        const tgt = route[0];
+        const dx = tgt.x - pos.x, dz = tgt.z - pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 0.12) {
+          route.shift();
+          if (!route.length) { const a = onArrive; onArrive = null; a?.(); }
+        } else {
+          mx = dx / d; mz = dz / d; moving = true;
+          speed = Math.min(1, d / 0.5 + 0.4);
         }
       }
-      if (moving) {
-        const nx = THREE.MathUtils.clamp(oldX + moveX*delta*4.3,worldBounds.minX,worldBounds.maxX);
-        const nz = THREE.MathUtils.clamp(oldZ + moveZ*delta*4.3,worldBounds.minZ,worldBounds.maxZ);
-        if (!collides(nx,oldZ)) avatar.position.x = nx;
-        if (!collides(avatar.position.x,nz)) avatar.position.z = nz;
-        avatar.rotation.y = Math.atan2(moveX,-moveZ);
+      if (moving && (mx || mz)) {
+        const step = 2.6 * speed * dt;
+        const nx = pos.x + mx * step, nz = pos.z + mz * step;
+        if (!collides(nx, pos.z) || route.length) pos.x = THREE.MathUtils.clamp(nx, site.bounds.minX, site.bounds.maxX);
+        if (!collides(pos.x, nz) || route.length) pos.z = THREE.MathUtils.clamp(nz, site.bounds.minZ, site.bounds.maxZ);
+        targetYaw = Math.atan2(mx, -mz);
+      }
+      // Turn smoothly toward the target heading.
+      let dy = targetYaw - avatar.root.rotation.y;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      avatar.root.rotation.y += dy * Math.min(1, dt * 9);
+
+      // Rosary: slide to the next bead every few seconds and count decades.
+      if (avatar.hands === 'rosary') {
+        rosaryTimer += dt;
+        if (rosaryTimer > 3.2) {
+          rosaryTimer = 0;
+          rosaryCount += 1;
+          avatar.nextBead();
+          const decade = Math.min(5, Math.floor((rosaryCount - 1) / 10) + 1);
+          const bead = ((rosaryCount - 1) % 10) + 1;
+          say(rosaryCount > 50 ? '다섯 단을 모두 바쳤습니다. 영광송으로 마칩니다.' : `묵주기도 ${decade}단 · 성모송 ${bead}/10`);
+          if (rosaryCount > 50) { avatar.setHands('rest'); sync(); }
+        }
       }
 
-      const gait = moving ? Math.sin(clock.elapsedTime*11.5)*0.5 : 0;
-      if (gesture.current !== 'sit' && gesture.current !== 'kneel') {
-        leftLeg.rotation.x = gait;
-        rightLeg.rotation.x = -gait;
-        leftKnee.rotation.x = Math.max(0, gait) * 0.34;
-        rightKnee.rotation.x = Math.max(0, -gait) * 0.34;
+      avatar.update(dt, moving, speed);
+
+      // Holy water fonts.
+      const nearF = site.fonts.some(f => Math.hypot(f.x - pos.x, f.z - pos.z) < 1.35);
+      if (nearF !== lastNearFont) { lastNearFont = nearF; setNearFont(nearF); }
+
+      // Indoor / outdoor light blend.
+      indoor += (site.indoorAt(pos.x, pos.z) - indoor) * Math.min(1, dt * 2);
+      (scene.fog as THREE.Fog).color.copy(outdoorFog).lerp(indoorFog, indoor);
+      (scene.fog as THREE.Fog).near = THREE.MathUtils.lerp(60, 26, indoor);
+      (scene.fog as THREE.Fog).far = THREE.MathUtils.lerp(260, 95, indoor);
+      hemi.intensity = THREE.MathUtils.lerp(1.35, 0.6, indoor);
+      sun.intensity = THREE.MathUtils.lerp(2.6, 1.6, indoor);
+      renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 1.12, indoor);
+      site.update(time, dt, indoor);
+
+      // Sparkles.
+      if (sparkT >= 0) {
+        sparkT += dt;
+        for (let i = 0; i < sparkN; i += 1) {
+          sparkPos[i * 3] += sparkVel[i * 3] * dt;
+          sparkPos[i * 3 + 1] += sparkVel[i * 3 + 1] * dt;
+          sparkPos[i * 3 + 2] += sparkVel[i * 3 + 2] * dt;
+          sparkVel[i * 3 + 1] -= dt * 0.4;
+        }
+        sparkGeo.attributes.position.needsUpdate = true;
+        sparkMat.opacity = Math.max(0, 1 - sparkT / 1.4);
+        if (sparkT > 1.4) sparkT = -1;
       }
-      leftArm.rotation.x = -gait*0.42; rightArm.rotation.x = gait*0.42;
-      leftArm.rotation.z = 0; rightArm.rotation.z = 0;
-      leftForearm.rotation.set(0,0,0); rightForearm.rotation.set(0,0,0);
-      leftHand.rotation.set(0,0,0); rightHand.rotation.set(0,0,0);
-      leftFingers.forEach(finger => finger.rotation.set(0,0,0));
-      rightFingers.forEach(finger => finger.rotation.set(0,0,0));
-      leftThumb.rotation.set(0,0,0); rightThumb.rotation.set(0,0,0);
-      leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
-      head.rotation.x = 0; torso.rotation.x = 0;
 
-
-      if (gesture.current === 'sit') {
-        const sitProgress = Math.min(1, (performance.now() - gestureAt.current) / 860);
-        const sitEase = sitProgress * sitProgress * (3 - 2 * sitProgress);
-        avatar.position.y = 0.28 * sitEase;
-        torso.rotation.x = -0.045 * sitEase;
-        leftLeg.rotation.x = 1.18 * sitEase;
-        rightLeg.rotation.x = 1.18 * sitEase;
-        leftKnee.rotation.x = -1.12 * sitEase;
-        rightKnee.rotation.x = -1.12 * sitEase;
-        leftArm.rotation.x = -0.08 * sitEase;
-        rightArm.rotation.x = -0.08 * sitEase;
-        leftForearm.rotation.x = -0.22 * sitEase;
-        rightForearm.rotation.x = -0.22 * sitEase;
-        leftFingers.forEach(finger => { finger.rotation.z = 0.035; });
-        rightFingers.forEach(finger => { finger.rotation.z = -0.035; });
-        head.rotation.x = -0.04 * sitEase;
-      } else if (gesture.current === 'dip') {
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 980);
-        const reach = Math.sin(t * Math.PI);
-        rightArm.rotation.x = 0.9 * reach;
-        rightArm.rotation.z = -0.68 * reach;
-        rightForearm.rotation.x = 0.55 * reach;
-        rightHand.rotation.z = -0.18 * reach;
-        head.rotation.x = -0.12 * reach;
-        if (t >= 1) gesture.current = 'idle';
-      } else if (gesture.current === 'stand') {
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 640);
-        const ease = t * t * (3 - 2 * t);
-        const remain = 1 - ease;
-        avatar.position.y = 0.28 * remain;
-        torso.rotation.x = -0.045 * remain;
-        leftLeg.rotation.x = 1.18 * remain;
-        rightLeg.rotation.x = 1.18 * remain;
-        leftKnee.rotation.x = -1.12 * remain;
-        rightKnee.rotation.x = -1.12 * remain;
-        leftArm.rotation.x = -0.08 * remain;
-        rightArm.rotation.x = -0.08 * remain;
-        leftForearm.rotation.x = -0.22 * remain;
-        rightForearm.rotation.x = -0.22 * remain;
-        if (t >= 1) {
-          if (pendingGesture) {
-            const nextGesture = pendingGesture;
-            pendingGesture = null;
-            gesture.current = nextGesture;
-            gestureAt.current = performance.now();
-            rosary.visible = nextGesture === 'rosary';
-          } else {
-            gesture.current = 'idle';
+      // Camera: over the shoulder; inside the confessional it sits behind the penitent.
+      const eye = 1.62 + (avatar.pelvis.position.y - 0.93) * 0.9;
+      if (confessing && confession_ref.current !== 'off') {
+        camPos.lerp(site.confessional.cameraEye, 1 - Math.exp(-dt * 3));
+        camLook.lerp(site.confessional.cameraLook, 1 - Math.exp(-dt * 3));
+      } else {
+        const back = tmpV.set(pos.x - Math.sin(yaw) * dist * Math.cos(pitch * 0.5), eye + 0.18 + Math.max(0, pitch) * dist * 0.25, pos.z + Math.cos(yaw) * dist * Math.cos(pitch * 0.5));
+        // Pull the camera in front of pillars and walls between it and the avatar.
+        const hx = pos.x, hz = pos.z;
+        const cdx = back.x - hx, cdz = back.z - hz;
+        const clen = Math.hypot(cdx, cdz);
+        for (let k = 1; k <= 24; k += 1) {
+          const u = k / 24;
+          const px = hx + cdx * u, pz = hz + cdz * u;
+          if (site.blockers.some(bk => !bk.low && Math.abs(px - bk.x) < bk.rx + 0.12 && Math.abs(pz - bk.z) < bk.rz + 0.12)) {
+            const keep = Math.max(0.35, clen * (k - 1) / 24 - 0.1) / Math.max(0.001, clen);
+            back.x = hx + cdx * keep;
+            back.z = hz + cdz * keep;
+            break;
           }
         }
-      } else if (gesture.current === 'kneel') {
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 780);
-        const ease = t * t * (3 - 2 * t);
-        avatar.position.y = -0.22 * ease;
-        torso.rotation.x = -0.11 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
-        leftLeg.rotation.x = 0.08 * ease;
-        rightLeg.rotation.x = 0.08 * ease;
-        leftKnee.rotation.x = -1.5 * ease;
-        rightKnee.rotation.x = -1.5 * ease;
-        leftArm.rotation.x = 0.78 * ease;
-        rightArm.rotation.x = 0.78 * ease;
-        leftArm.rotation.z = 0.6 * ease;
-        rightArm.rotation.z = -0.6 * ease;
-        leftForearm.rotation.x = 1.22 * ease;
-        rightForearm.rotation.x = 1.22 * ease;
-        leftForearm.rotation.z = 0.13 * ease;
-        rightForearm.rotation.z = -0.13 * ease;
-        leftHand.rotation.z = -0.12 * ease;
-        rightHand.rotation.z = 0.12 * ease;
-        leftFingers.forEach(finger => { finger.rotation.z = 0.07 * ease; });
-        rightFingers.forEach(finger => { finger.rotation.z = -0.07 * ease; });
-        leftThumb.rotation.z = 0.2 * ease;
-        rightThumb.rotation.z = -0.2 * ease;
-        head.rotation.x = -0.18 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
-      } else if (gesture.current === 'rosary') {
-        const t = THREE.MathUtils.clamp((performance.now() - gestureAt.current) / 620, 0, 1);
-        const blend = t * t * (3 - 2 * t);
-        leftArm.rotation.x = 0.82 * blend; rightArm.rotation.x = 0.82 * blend;
-        leftArm.rotation.z = 0.58 * blend; rightArm.rotation.z = -0.58 * blend;
-        leftForearm.rotation.x = 1.18 * blend; rightForearm.rotation.x = 1.18 * blend;
-        leftForearm.rotation.z = 0.13 * blend; rightForearm.rotation.z = -0.13 * blend;
-        leftHand.rotation.z = -0.12 * blend; rightHand.rotation.z = 0.12 * blend;
-        leftFingers.forEach((finger, index) => { finger.rotation.z = (0.10 + (index - 1.5) * 0.035) * blend; });
-        rightFingers.forEach((finger, index) => { finger.rotation.z = (-0.10 + (index - 1.5) * 0.035) * blend; });
-        leftThumb.rotation.z = 0.25 * blend;
-        rightThumb.rotation.z = -0.25 * blend;
-        head.rotation.x = -0.13 * blend;
-        rosary.visible = true;
-        rosary.rotation.z = Math.sin(clock.elapsedTime * 1.15) * 0.018;
-        rosary.rotation.y = Math.sin(clock.elapsedTime * 0.8) * 0.025;
-        rosaryBeadMaterial.emissiveIntensity = 0.07 + Math.sin(clock.elapsedTime * 2.0) * 0.025;
-      } else if (gesture.current === 'cross') {
-        // Western Catholic gesture order: forehead -> chest -> left shoulder -> right shoulder.
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 2350);
-        const keyframes = [
-          { t: 0.00, x: 0.12, z: -0.02, elbow: 0.0 },
-          { t: 0.15, x: 0.46, z: -0.80, elbow: 0.18 },
-          { t: 0.37, x: 0.96, z: -0.34, elbow: 0.72 },
-          { t: 0.63, x: 0.78, z: -1.02, elbow: 0.34 },
-          { t: 0.85, x: 0.78, z: 0.02, elbow: 0.34 },
-          { t: 1.00, x: 0.00, z: 0.00, elbow: 0.00 },
-        ];
-        let a = keyframes[0], b = keyframes[keyframes.length - 1];
-        for (let i = 0; i < keyframes.length - 1; i += 1) {
-          if (t >= keyframes[i].t && t <= keyframes[i + 1].t) {
-            a = keyframes[i]; b = keyframes[i + 1]; break;
-          }
+        // Keep the camera inside the church walls while indoors.
+        if (indoor > 0.6) {
+          back.x = THREE.MathUtils.clamp(back.x, -14.0, 14.0);
+          back.z = THREE.MathUtils.clamp(back.z, -27, 19.2);
         }
-        const u = THREE.MathUtils.clamp((t - a.t) / Math.max(0.001, b.t - a.t), 0, 1);
-        const eased = u * u * (3 - 2 * u);
-        rightArm.rotation.x = THREE.MathUtils.lerp(a.x, b.x, eased);
-        rightArm.rotation.z = THREE.MathUtils.lerp(a.z, b.z, eased);
-        rightForearm.rotation.x = THREE.MathUtils.lerp(a.elbow, b.elbow, eased);
-        rightHand.rotation.x = -0.08;
-        leftArm.rotation.x = 0.04;
-        leftForearm.rotation.x = 0.04;
-        head.rotation.x = t < 0.98 ? -0.035 : 0;
-        if (t >= 1) gesture.current = 'idle';
-      } else if (gesture.current === 'prayer') {
-        const t = THREE.MathUtils.clamp((performance.now() - gestureAt.current) / 520, 0, 1);
-        const blend = t * t * (3 - 2 * t);
-        const breath = Math.sin(clock.elapsedTime * 1.35) * 0.018;
-        leftArm.rotation.x = (0.78 + breath) * blend;
-        rightArm.rotation.x = (0.78 + breath) * blend;
-        leftArm.rotation.z = 0.6 * blend;
-        rightArm.rotation.z = -0.6 * blend;
-        leftForearm.rotation.x = 1.22 * blend;
-        rightForearm.rotation.x = 1.22 * blend;
-        leftForearm.rotation.z = 0.13 * blend;
-        rightForearm.rotation.z = -0.13 * blend;
-        leftHand.rotation.z = -0.12 * blend;
-        rightHand.rotation.z = 0.12 * blend;
-        leftFingers.forEach(finger => { finger.rotation.z = 0.07 * blend; });
-        rightFingers.forEach(finger => { finger.rotation.z = -0.07 * blend; });
-        leftThumb.rotation.z = 0.2 * blend;
-        rightThumb.rotation.z = -0.2 * blend;
-        head.rotation.x = (-0.18 + breath * 0.45) * blend;
-        torso.rotation.x = (-0.025 + breath * 0.5) * blend;
-      } else if (gesture.current === 'bow') {
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 1500);
-        const pulse = Math.sin(t * Math.PI);
-        head.rotation.x = -0.38 * pulse;
-        torso.rotation.x = -0.16 * pulse;
-        avatar.position.y = -0.025 * pulse;
-        leftArm.rotation.x = -0.08 * pulse;
-        rightArm.rotation.x = -0.08 * pulse;
-        if (t >= 1) gesture.current = 'idle';
-      } else if (gesture.current === 'greet') {
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 1850);
-        const raise = Math.min(1, t / 0.24);
-        const lower = t > 0.82 ? (t - 0.82) / 0.18 : 0;
-        const amplitude = Math.min(1, raise) * (1 - lower);
-        rightArm.rotation.z = 0.92 * amplitude;
-        rightArm.rotation.x = 0.28 * amplitude;
-        rightForearm.rotation.x = 0.82 * amplitude;
-        rightHand.rotation.z = Math.sin(clock.elapsedTime * 9) * 0.22 * amplitude;
-        if (t >= 1) gesture.current = 'idle';
-      } else if (gesture.current === 'idle' && !isSitting) {
-        avatar.position.y = 0;
-        rosary.visible = false;
+        camPos.lerp(back, firstFrame ? 1 : 1 - Math.exp(-dt * 8));
+        const look = tmpV.set(pos.x + Math.sin(yaw) * 10 * Math.cos(pitch), eye + Math.sin(pitch) * 10, pos.z - Math.cos(yaw) * 10 * Math.cos(pitch));
+        camLook.lerp(look, firstFrame ? 1 : 1 - Math.exp(-dt * 10));
       }
+      camera.position.copy(camPos);
+      camera.lookAt(camLook);
+      sun.position.set(pos.x - 40, 45, pos.z + 70);
+      sun.target.position.set(pos.x, 0, pos.z);
 
-
-      const eyeHeight = 1.52 + avatar.position.y;
-      // Close over-the-shoulder eye-line camera: only gaze direction changes when looking up or down.
-      cameraTarget.set(
-        avatar.position.x - Math.sin(yaw) * cameraDistance,
-        eyeHeight,
-        avatar.position.z + Math.cos(yaw) * cameraDistance,
-      );
-      camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
-      const lookDistance = 14;
-      const viewHorizontal = Math.cos(pitch) * lookDistance;
-      lookTarget.set(
-        avatar.position.x + Math.sin(yaw) * viewHorizontal,
-        eyeHeight + Math.sin(pitch) * lookDistance,
-        avatar.position.z - Math.cos(yaw) * viewHorizontal,
-      );
-      camera.lookAt(lookTarget);
-
-      const fontDistance = Math.hypot(avatar.position.x + 2.2, avatar.position.z - 12);
-      const near = fontDistance < 2.2;
-      if (near !== lastNearFont) {
-        lastNearFont = near;
-        setNearFont(near);
-      }
-      const maryDistance = Math.hypot(avatar.position.x - 13.15, avatar.position.z - 49.5);
-      const nearShrine = maryDistance < 4.2;
-      if (nearShrine !== lastNearMary) {
-        lastNearMary = nearShrine;
-        setNearMary(nearShrine);
-      }
-      (fontHalo.material as THREE.MeshBasicMaterial).opacity = near ? 0.9 : 0.38;
-      fontLight.intensity = near ? 2.5 : 1.3;
-      waterSurface.rotation.z = Math.sin(clock.elapsedTime * 0.9) * 0.018;
-      fountainWater.position.y = 2.05 + Math.sin(clock.elapsedTime * 1.6) * 0.035;
       renderer.render(scene, camera);
+      if (firstFrame) { firstFrame = false; setLoading(false); }
     };
+    const confession_ref = { current: 'off' as 'off' | 'writing' | 'released' };
+    const watchConfession = (e: Event) => { confession_ref.current = (e as CustomEvent<'off' | 'writing' | 'released'>).detail; };
+    window.addEventListener('religion:confession', watchConfession as EventListener);
     onResize();
     animate();
 
     return () => {
       cancelAnimationFrame(frame);
+      apiRef.current = null;
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('religion:joystick', onJoystick as EventListener);
-      window.removeEventListener('religion:action', onWorldAction as EventListener);
+      window.removeEventListener('religion:confession', watchConfession as EventListener);
       host.removeEventListener('pointerdown', onPointerDown);
       host.removeEventListener('pointermove', onPointerMove);
+      host.removeEventListener('wheel', onWheel);
       host.removeEventListener('touchstart', onTouchStart);
       host.removeEventListener('touchmove', onTouchMove);
       host.removeEventListener('touchend', onTouchEnd);
-      host.removeEventListener('wheel', onWheel);
-      scene.traverse(object => {
-        if (object instanceof THREE.Mesh || object instanceof THREE.Sprite) {
-          if (object instanceof THREE.Mesh) object.geometry.dispose();
-          const materials = Array.isArray(object.material) ? object.material : [object.material];
-          materials.forEach(material => material.dispose());
-        }
-      });
-      loadedTextures.forEach(texture => texture.dispose());
-      labelTexture.dispose();
-      marySignTexture.dispose();
-      ceilingPhotoMaterial.dispose();
-      exteriorFacadeMaterial.dispose();
-      courtyardPhotoMaterial.dispose();
+      site.dispose();
+      avatar.dispose();
+      sparkGeo.dispose();
+      sparkMat.dispose();
+      sparkTex.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
   }, [displayName]);
 
-  const dip = () => {
-    dispatchWorldAction('dip');
-    setStep('cross');
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('religion:confession', { detail: confession }));
+  }, [confession]);
+
+  const act = (a: Action) => apiRef.current?.act(a);
+  const joystickTo = (x: number, y: number) => window.dispatchEvent(new CustomEvent('religion:joystick', { detail: { x, y } }));
+  const moveJoystick = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const rad = r.width * 0.33;
+    let x = (e.clientX - (r.left + r.width / 2)) / rad;
+    let y = (e.clientY - (r.top + r.height / 2)) / rad;
+    const l = Math.hypot(x, y);
+    if (l > 1) { x /= l; y /= l; }
+    setJoystick({ x: x * rad, y: y * rad });
+    joystickTo(x, y);
   };
-  const sign = () => {
-    dispatchWorldAction('cross');
-    setStep('done');
-  };
-  const dispatchWorldAction = (action: string) =>
-    window.dispatchEvent(new CustomEvent('religion:action', { detail: action }));
-  const dispatchJoystick = (x: number, y: number) =>
-    window.dispatchEvent(new CustomEvent('religion:joystick', { detail: { x, y } }));
-  const updateJoystick = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const radius = rect.width * 0.33;
-    let x = (event.clientX - (rect.left + rect.width/2)) / radius;
-    let y = (event.clientY - (rect.top + rect.height/2)) / radius;
-    const length = Math.hypot(x,y);
-    if (length > 1) { x /= length; y /= length; }
-    setJoystickOffset({ x:x*radius, y:y*radius });
-    dispatchJoystick(x,y);
-  };
-  const stopJoystick = (event?: ReactPointerEvent<HTMLDivElement>) => {
-    if (event) event.preventDefault();
-    setJoystickOffset({x:0,y:0});
-    dispatchJoystick(0,0);
+  const stopJoystick = () => { setJoystick({ x: 0, y: 0 }); joystickTo(0, 0); };
+  const submitConfession = (e: FormEvent) => {
+    e.preventDefault();
+    if (!confessionText.trim()) return;
+    setReleasedText(confessionText);
+    setConfessionText('');
+    apiRef.current?.finishConfession();
   };
 
   return (
     <div className="immersive-avatar-stage">
-      <div ref={hostRef} className="immersive-avatar-canvas" aria-label="하나로 이어진 3D 성당과 정원. WASD 또는 방향키로 이동하고, 클릭이나 터치로 목적지를 지정하세요." />
-      {nearFont && step !== 'done' ? (
-        <div className="holy-water-actions" role="group" aria-label="성수대 액션">
-          <span aria-hidden="true">{step === 'water' ? '✧' : '✝'}</span>
-          {step === 'water'
-            ? <button type="button" className="holy-water-primary" onClick={dip}>💧 성수 찍기</button>
-            : <button type="button" className="holy-water-primary" onClick={sign}>성호 긋기</button>}
-          <button type="button" className="holy-water-skip" onClick={() => setStep('done')}>건너뛰기</button>
+      <div ref={hostRef} className="immersive-avatar-canvas" aria-label="성당과 정원이 이어진 3D 공간. WASD 또는 방향키로 이동하고, 바닥을 클릭하면 그곳으로 걸어갑니다." />
+      {loading ? <div className="world-loading" role="status">성당 문을 여는 중…</div> : null}
+
+      {nearFont && fontStep !== 'done' && confession === 'off' ? (
+        <div className="holy-water-actions" role="group" aria-label="성수대">
+          <span aria-hidden="true">{fontStep === 'water' ? '✧' : '✝'}</span>
+          {fontStep === 'water'
+            ? <button type="button" className="holy-water-primary" onClick={() => { apiRef.current?.dip(); setFontStep('cross'); }}>성수 찍기</button>
+            : <button type="button" className="holy-water-primary" onClick={() => { act('cross'); setFontStep('done'); }}>성호 긋기</button>}
+          <button type="button" className="holy-water-skip" onClick={() => setFontStep('done')}>건너뛰기</button>
         </div>
       ) : null}
 
-      <div className="world-action-notice" role="status">
-        {actionNotice}{nearMary ? ' · 성모님 기도처 근처' : ''}
+      {candlePicker ? (
+        <div className="candle-picker" role="dialog" aria-label="초 봉헌 지향 선택">
+          <p>어떤 마음으로 초를 밝힐까요?</p>
+          <div>
+            {INTENTIONS.map(i => <button type="button" key={i} onClick={() => apiRef.current?.lightCandle(i)}>{i}</button>)}
+          </div>
+          <button type="button" className="candle-picker-close" onClick={() => setCandlePicker(false)}>닫기</button>
+        </div>
+      ) : null}
+
+      {confession !== 'off' ? (
+        <div className={`confession-panel ${confession}`} role="dialog" aria-label="고해소">
+          {confession === 'writing' ? (
+            <form onSubmit={submitConfession}>
+              <h2>마음을 내려놓는 자리</h2>
+              <p>적은 글은 이 기기 화면에서 빛으로 바뀌어 사라지며, 어디에도 보내거나 저장하지 않습니다. 실제 고해성사는 사제와 함께 드립니다.</p>
+              <textarea value={confessionText} onChange={e => setConfessionText(e.target.value)} maxLength={600} placeholder="주님, 제 마음을 봐 주세요…" autoFocus />
+              <div className="confession-buttons">
+                <button type="button" className="ghost" onClick={() => { setConfession('off'); apiRef.current?.leaveConfession(); }}>나가기</button>
+                <button type="submit" disabled={!confessionText.trim()}>빛으로 내려놓기</button>
+              </div>
+            </form>
+          ) : (
+            <div className="confession-release">
+              <p className="released-text" aria-hidden="true">{releasedText.split('').map((ch, i) => <span key={i} style={{ animationDelay: `${(i % 40) * 0.035}s` }}>{ch}</span>)}</p>
+              <p className="confession-peace">“평화가 너희와 함께.”</p>
+              <button type="button" onClick={() => apiRef.current?.leaveConfession()}>고해소에서 나오기</button>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className="world-action-notice" role="status">{notice}</div>
+      <div className="world-action-bar" role="group" aria-label="동작" hidden={confession !== 'off'}>
+        <button type="button" onClick={() => act('cross')}>✝ 성호 긋기</button>
+        <button type="button" aria-pressed={state.praying} onClick={() => act('prayer')}>🙏 {state.praying ? '기도 마치기' : '기도하기'}</button>
+        <button type="button" aria-pressed={state.rosary} onClick={() => act('rosary')}>📿 {state.rosary ? '묵주 내려놓기' : '묵주기도'}</button>
+        <button type="button" aria-pressed={state.veil} onClick={() => act('veil')}>{state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
+        <button type="button" onClick={() => act('bow')}>목례</button>
+        <button type="button" onClick={() => act('greet')}>인사</button>
+        <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 {state.sitting ? '일어나기' : '앉기'}</button>
+        <button type="button" onClick={() => act('candle')}>🕯 초 봉헌</button>
+        <button type="button" onClick={() => act('confess')}>고해소</button>
+        <button type="button" onClick={() => act('mary')}>🌹 성모님께</button>
       </div>
-      <div className="world-action-bar" role="group" aria-label="주요 행동">
-        <button type="button" onClick={() => dispatchWorldAction('cross')}>✝ 성호 긋기</button>
-        <button type="button" onClick={() => dispatchWorldAction('prayer')}>🙏 기도하기</button>
-        <button type="button" onClick={() => dispatchWorldAction('bow')}>목례</button>
-        <button type="button" onClick={() => dispatchWorldAction('greet')}>인사하기</button>
-        <button type="button" onClick={() => dispatchWorldAction('seat')}>🪑 착석하기</button>
-        <button type="button" onClick={() => dispatchWorldAction('rosary')}>📿 묵주기도</button>
-        <button type="button" onClick={() => dispatchWorldAction('mary')}>🌹 {nearMary ? '성모님께 기도' : '성모상 찾아가기'}</button>
-      </div>
-      <div className="mobile-joystick" role="application" aria-label="모바일 이동 조이스틱"
-        onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); updateJoystick(event); }}
-        onPointerMove={event => { if (event.buttons > 0 || event.pressure > 0) updateJoystick(event); }}
+      <div className="mobile-joystick" role="application" aria-label="이동 조이스틱"
+        onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); moveJoystick(e); }}
+        onPointerMove={e => { if (e.buttons > 0 || e.pressure > 0) moveJoystick(e); }}
         onPointerUp={stopJoystick} onPointerCancel={stopJoystick} onLostPointerCapture={stopJoystick}>
-        <span className="mobile-joystick-direction mobile-joystick-up">▲</span>
-        <span className="mobile-joystick-direction mobile-joystick-down">▼</span>
-        <span className="mobile-joystick-direction mobile-joystick-left">◀</span>
-        <span className="mobile-joystick-direction mobile-joystick-right">▶</span>
-        <span className="mobile-joystick-knob" style={{transform:`translate(${joystickOffset.x}px, ${joystickOffset.y}px)`}} />
+        <span className="mobile-joystick-knob" style={{ transform: `translate(${joystick.x}px, ${joystick.y}px)` }} />
       </div>
-      <div className="camera-touch-hint" aria-hidden="true">화면 드래그로 시점 변경 · 두 손가락 줌</div>
+      <div className="camera-touch-hint" aria-hidden="true">드래그로 둘러보기 · 휠/두 손가락으로 거리 조절</div>
       <div className="world-asset-credit">
-        실제 성당 사진 자료 ·
-        <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_exterior_front.jpg" target="_blank" rel="noreferrer">정면 Saffron Blaze · CC BY-SA 3.0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:Interior_of_St._Vitus_Cathedral,_Nave,_Prague_20160809_1.jpg" target="_blank" rel="noreferrer">내부 DXR · CC BY-SA 4.0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_Vaulted_Ceiling.jpg" target="_blank" rel="noreferrer">천장 Zhurakovskyi · CC0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:Milan_Cathedral,_floor.jpg" target="_blank" rel="noreferrer">바닥 Gerda Arendt · CC0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_courtyard.JPG" target="_blank" rel="noreferrer">외부 정원 Fæ · CC BY-SA 3.0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:EstatuaGrutadeLourdes-MDP.jpg" target="_blank" rel="noreferrer">성모상 Ezarate · CC BY-SA 4.0</a>
+        바닥 대리석 사진 <a href="https://commons.wikimedia.org/wiki/File:Milan_Cathedral,_floor.jpg" target="_blank" rel="noreferrer">Gerda Arendt · CC0</a> · 건축·조각·스테인드글라스는 코드로 만든 창작물입니다.
       </div>
     </div>
   );

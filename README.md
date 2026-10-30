@@ -21,7 +21,7 @@ Without Supabase credentials, the UI runs in local demo mode. Demo contributions
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_PARISH_ID` — UUID of a row in `public.parishes`.
-- `NEXT_PUBLIC_GREGORIAN_AUDIO_URL` — optional URL override; by default the player uses the public-domain `Veni Sancte Spiritus` recording by Membeth from Wikimedia Commons.
+- `NEXT_PUBLIC_GREGORIAN_AUDIO_URL` — optional URL override; by default the player uses the public-domain `Veni Sancte Spiritus` recording by Membeth, served from `apps/web/public/audio` (credits in `apps/web/public/audio/CREDITS.md`).
 
 ## Privacy and pastoral boundaries
 - Prayer intentions are private by default. Public intentions are shown only after the user opts in.
