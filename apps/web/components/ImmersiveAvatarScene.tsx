@@ -530,23 +530,57 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     addBox(maryGrotto, 2.7, 0.28, 1.8, trim, 0, 4.15, -0.12);
     // Real photograph of a Lourdes statue is mapped onto a vertical plane inside a
     // sculpted 3D stone frame. This is a photo-textured display, not a claimed 3D scan.
+
     const maryImage = new THREE.Mesh(
       new THREE.PlaneGeometry(1.75, 2.25),
       new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.92, side: THREE.DoubleSide })
     );
-    maryImage.position.set(-0.02, 2.55, -0.69);
+    // Face the photo-textured reference and the 3D statue toward the garden approach.
+    maryImage.position.set(-1.78, 2.55, 0);
+    maryImage.rotation.y = -Math.PI / 2;
     maryGrotto.add(maryImage);
-    addBox(maryGrotto, 2.1, 0.12, 0.18, trim, 0, 1.35, -0.77);
-    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, -1.0, 2.62, -0.77);
-    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, 1.0, 2.62, -0.77);
+
+    // Volumetric Marian sculpture: carved robe, blue mantle, veil, face and joined hands.
+    const maryStatue = new THREE.Group();
+    maryStatue.position.set(-1.62, 0, 0);
+    maryGrotto.add(maryStatue);
+    const statueIvory = makeMat('#eee9de', 0.74, 0.02);
+    const statueBlue = makeMat('#526f9d', 0.78, 0.02);
+    const statueSkin = makeMat('#d7b99e', 0.8);
+    const robeProfile = [
+      new THREE.Vector2(0.16, 0), new THREE.Vector2(0.22, 0.12),
+      new THREE.Vector2(0.34, 0.52), new THREE.Vector2(0.42, 1.05),
+      new THREE.Vector2(0.34, 1.55), new THREE.Vector2(0.25, 1.92),
+      new THREE.Vector2(0.18, 2.08),
+    ];
+    addMesh(maryStatue, new THREE.LatheGeometry(robeProfile, 28), statueIvory, 0, 0.45, 0);
+    const mantle = addMesh(maryStatue, new THREE.SphereGeometry(0.43, 22, 16), statueBlue, 0, 2.15, 0.02);
+    mantle.scale.set(1.05, 1.12, 0.76);
+    const veil = addMesh(maryStatue, new THREE.SphereGeometry(0.32, 22, 16), statueIvory, 0, 2.83, 0.02);
+    veil.scale.set(1.0, 1.3, 0.92);
+    const face = addMesh(maryStatue, new THREE.SphereGeometry(0.2, 20, 16), statueSkin, 0, 2.91, -0.02);
+    face.scale.set(0.88, 1.15, 0.78);
+    const sash = addMesh(maryStatue, new THREE.BoxGeometry(0.12, 1.25, 0.08), makeMat('#9db4ce', 0.55), 0.18, 1.78, -0.24);
+    sash.rotation.z = -0.16;
+    const maryLeftArm = addMesh(maryStatue, new THREE.CapsuleGeometry(0.075, 0.58, 4, 10), statueBlue, -0.32, 2.15, -0.02);
+    maryLeftArm.rotation.z = -0.58;
+    const maryRightArm = addMesh(maryStatue, new THREE.CapsuleGeometry(0.075, 0.58, 4, 10), statueBlue, 0.32, 2.15, -0.02);
+    maryRightArm.rotation.z = 0.58;
+    addMesh(maryStatue, new THREE.SphereGeometry(0.085, 14, 12), statueSkin, -0.06, 1.94, -0.3);
+    addMesh(maryStatue, new THREE.SphereGeometry(0.085, 14, 12), statueSkin, 0.06, 1.94, -0.3);
+    addMesh(maryStatue, new THREE.ConeGeometry(0.07, 0.32, 10), trim, 0, 3.22, 0.02);
+
+    addBox(maryGrotto, 2.1, 0.12, 0.18, trim, -1.88, 1.35, 0);
+    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, -1.88, 2.62, -1.0);
+    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, -1.88, 2.62, 1.0);
     const maryArchCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-1.08, 3.72, -0.76),
-      new THREE.Vector3(-0.9, 4.05, -0.76),
-      new THREE.Vector3(-0.48, 4.28, -0.76),
-      new THREE.Vector3(0, 4.36, -0.76),
-      new THREE.Vector3(0.48, 4.28, -0.76),
-      new THREE.Vector3(0.9, 4.05, -0.76),
-      new THREE.Vector3(1.08, 3.72, -0.76),
+      new THREE.Vector3(-1.9, 3.72, -1.08),
+      new THREE.Vector3(-1.9, 4.05, -0.9),
+      new THREE.Vector3(-1.9, 4.28, -0.48),
+      new THREE.Vector3(-1.9, 4.36, 0),
+      new THREE.Vector3(-1.9, 4.28, 0.48),
+      new THREE.Vector3(-1.9, 4.05, 0.9),
+      new THREE.Vector3(-1.9, 3.72, 1.08),
     ]);
     maryGrotto.add(new THREE.Mesh(new THREE.TubeGeometry(maryArchCurve, 48, 0.12, 10, false), trim));
     for (const x of [-1.18, 1.18]) {
@@ -557,6 +591,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       candleGlow.position.set(x, 1.9, -0.18);
       maryGrotto.add(candleGlow);
     }
+    // A small kneeler and resting rail set a clear personal prayer spot.
+    addBox(maryGrotto, 2.0, 0.18, 0.48, wood, 0, 0.68, 1.52);
+    addBox(maryGrotto, 2.0, 0.68, 0.16, wood, 0, 1.02, 1.72);
     // A kneeler and low seat mark the place to pause and pray.
     addBox(maryGrotto, 1.55, 0.18, 0.52, wood, 0, 0.62, 1.45);
     addBox(maryGrotto, 1.55, 0.72, 0.16, wood, 0, 0.98, 1.75);
