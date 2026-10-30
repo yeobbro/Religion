@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Intention = { id: string; text: string; createdAt: string };
 const Chapel3DScene = dynamic(() => import('./Chapel3DScene'), { ssr: false, loading: () => <div className="scene3d-loading">성당 공간을 준비하고 있습니다...</div> });
+const Garden3DScene = dynamic(() => import('./Garden3DScene'), { ssr: false, loading: () => <div className="scene3d-loading">정원을 준비하고 있습니다...</div> });
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
@@ -22,6 +23,7 @@ export default function ChapelExperience() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.35);
   const [sceneCandles, setSceneCandles] = useState(7);
+  const [space, setSpace] = useState<'chapel' | 'garden'>('chapel');
   const handleCandleChange = useCallback((count: number) => setSceneCandles(count), []);
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
@@ -109,7 +111,7 @@ export default function ChapelExperience() {
       <header className="topbar"><a className="brand" href="#"><span className="brand-mark">✝</span><span>RELIGION<small>함께 머무는 기도의 공간</small></span></a><div className="top-meta"><span className="live-dot" /> 온라인 기도 공간 <span className="meta-divider" /> 가톨릭 · 본당 공동체</div></header>
       <section className="hero">
         <div className="hero-copy"><p className="eyebrow">A QUIET PLACE TO PRAY</p><h1>잠시 머물며,<br/><em>함께 기도합니다.</em></h1><p className="hero-description">마음에 담아둔 지향을 촛불에 맡기고,<br/>우리 공동체의 기도를 하나로 모아보세요.</p><a className="hero-link" href="#offering">기도 봉헌하기 <span>↓</span></a></div>
-        <div className="chapel-scene"><Chapel3DScene onCandleChange={handleCandleChange} /></div>
+        <div className="chapel-scene"><div className="space-switch"><button className={space === "chapel" ? "active" : ""} onClick={() => setSpace("chapel")}>성당 내부</button><button className={space === "garden" ? "active" : ""} onClick={() => setSpace("garden")}>외부 정원</button></div>{space === "chapel" ? <Chapel3DScene onCandleChange={handleCandleChange} /> : <Garden3DScene />}</div>
       </section>
       <div className="content-grid">
         <section className="panel offering-panel" id="offering">
