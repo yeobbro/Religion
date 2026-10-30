@@ -148,3 +148,8 @@
   .avatar-touch-pad{left:12px;bottom:24px}
   .avatar-touch-pad button{width:36px;height:36px}
 }
+
+/* Keep the directional controls discoverable without adding instructional copy. */
+.avatar-touch-pad{display:flex;opacity:.72;transition:opacity .2s}
+.avatar-touch-pad:hover,.avatar-touch-pad:focus-within{opacity:1}
+@media(max-width:760px){.avatar-touch-pad{opacity:.88}}
