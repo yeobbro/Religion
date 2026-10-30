@@ -458,7 +458,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         addBox(world, 3.55, 0.22, 0.58, wood, x, 0.82, z);
         addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42);
         for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z);
-        addBlocker(x, z, 1.8, 0.48);
+        // The backrest blocks passage; the raised seat surface remains available for sitting.
+        addBlocker(x, z + 0.42, 1.8, 0.12);
       }
     }
 
@@ -907,7 +908,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const seatSpots: THREE.Vector3[] = [];
     for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
       for (const sideX of [-4.25, 4.25]) {
-        for (const offset of [-1.0, 0, 1.0]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z - 1.08));
+        for (const offset of [-0.7, 0, 0.7]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z - 0.12));
       }
     }
     const occupiedSeats = new Set<number>();
