@@ -26,7 +26,6 @@ create index if not exists prayer_intentions_parish_created_idx
 
 alter table public.parishes enable row level security;
 alter table public.prayer_intentions enable row level security;
-alter table public.rosary_contributions enable row level security;
 
 -- Public parish metadata and public intentions can be read by visitors.
 create policy "parishes are readable" on public.parishes for select using (true);
