@@ -1,5 +1,5 @@
-import ChapelExperience from '@/components/ChapelExperience';
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return <main><ChapelExperience /></main>;
+  redirect('/catholic');
 }

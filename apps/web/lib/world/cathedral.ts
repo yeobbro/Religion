@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
-  beamTexture, carpetTexture, flameTexture, glowTexture, labelTexture, noiseTexture, roseWindowTexture,
-  seeded, skyTexture, stainedGlassTexture, starVaultTexture, stationTexture,
+  beamTexture, carpetTexture, flameTexture, glowTexture, labelTexture, noiseTexture,
+  seeded, starVaultTexture, stationTexture,
 } from './textures';
+import { image } from './credits';
 import { createCrucifix, createMarianStatue, disposeGroup } from './statues';
 
 /**
@@ -67,20 +68,34 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   const loader = new THREE.TextureLoader();
 
   // ---------- Materials ----------
-  const marblePhoto = tex(loader.load('/textures/photos/marble-floor.jpg'));
+  const marblePhoto = tex(loader.load('/textures/marble-floor.jpg'));
   marblePhoto.colorSpace = THREE.SRGBColorSpace;
   marblePhoto.wrapS = marblePhoto.wrapT = THREE.RepeatWrapping;
   marblePhoto.repeat.set(5, 7);
-  const stoneTex = tex(noiseTexture('#cfc4ad', 3, 6, 6));
+  /** Photo-scanned CC0 surfaces from Poly Haven (colour + normal), tiled in world units by `bake`. */
+  const pbr = (id: string) => {
+    const map = tex(loader.load(`/textures/pbr/${id}_diff.jpg`));
+    map.colorSpace = THREE.SRGBColorSpace;
+    const normalMap = tex(loader.load(`/textures/pbr/${id}_nor_gl.jpg`));
+    for (const t of [map, normalMap]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return { map, normalMap };
+  };
+  const plaster = pbr('plastered_stone_wall');
+  const brick = pbr('castle_brick_07');
+  const planks = pbr('dark_wooden_planks');
+  const grassP = pbr('aerial_grass_rock');
+  const cobble = pbr('cobblestone_floor_08');
+  const rockP = pbr('rock_wall_08');
+  const ns = new THREE.Vector2(0.6, 0.6);
   const M = {
     floor: mat(new THREE.MeshStandardMaterial({ map: marblePhoto, roughness: 0.32, metalness: 0.05 })),
-    stone: mat(new THREE.MeshStandardMaterial({ color: '#d8ccb3', map: stoneTex, roughness: 0.9 })),
-    stoneIn: mat(new THREE.MeshStandardMaterial({ color: '#d8ccb3', map: stoneTex, roughness: 0.9, side: THREE.DoubleSide })),
-    stoneDark: mat(new THREE.MeshStandardMaterial({ color: '#a69a83', map: stoneTex, roughness: 0.92 })),
-    exterior: mat(new THREE.MeshStandardMaterial({ color: '#cdbf9f', map: stoneTex, roughness: 0.95 })),
+    stone: mat(new THREE.MeshStandardMaterial({ color: '#e6dccb', ...plaster, normalScale: ns, roughness: 0.92 })),
+    stoneIn: mat(new THREE.MeshStandardMaterial({ color: '#e6dccb', ...plaster, normalScale: ns, roughness: 0.92, side: THREE.DoubleSide })),
+    stoneDark: mat(new THREE.MeshStandardMaterial({ color: '#b3a68f', ...plaster, normalScale: ns, roughness: 0.94 })),
+    exterior: mat(new THREE.MeshStandardMaterial({ color: '#efe4cf', ...brick, roughness: 0.95 })),
     gold: mat(new THREE.MeshStandardMaterial({ color: '#c9a04a', roughness: 0.3, metalness: 0.85, emissive: '#2a1b05', emissiveIntensity: 0.4 })),
-    wood: mat(new THREE.MeshStandardMaterial({ color: '#5a3a24', map: tex(noiseTexture('#5a3a24', 9, 3, 2, 1.4)), roughness: 0.6 })),
-    woodDark: mat(new THREE.MeshStandardMaterial({ color: '#3a2618', map: tex(noiseTexture('#3a2618', 11, 3, 2, 1.4)), roughness: 0.62 })),
+    wood: mat(new THREE.MeshStandardMaterial({ color: '#c79a73', ...planks, roughness: 0.55 })),
+    woodDark: mat(new THREE.MeshStandardMaterial({ color: '#8a6347', ...planks, roughness: 0.6 })),
     iron: mat(new THREE.MeshStandardMaterial({ color: '#2a2724', roughness: 0.5, metalness: 0.7 })),
     vault: mat(new THREE.MeshStandardMaterial({ map: tex(starVaultTexture()), roughness: 0.85, side: THREE.DoubleSide })),
     carpet: mat(new THREE.MeshStandardMaterial({ map: tex(carpetTexture()), roughness: 0.95 })),
@@ -89,12 +104,12 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     wax: mat(new THREE.MeshStandardMaterial({ color: '#f2e9d6', roughness: 0.55, emissive: '#3a2a14', emissiveIntensity: 0.15 })),
     redGlass: mat(new THREE.MeshStandardMaterial({ color: '#b3222d', roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.78, emissive: '#5a0a10', emissiveIntensity: 0.6 })),
     slate: mat(new THREE.MeshStandardMaterial({ color: '#4c5560', roughness: 0.8 })),
-    grass: mat(new THREE.MeshStandardMaterial({ color: '#6d8455', map: tex(noiseTexture('#6d8455', 21, 40, 40, 1.6)), roughness: 1 })),
-    path: mat(new THREE.MeshStandardMaterial({ color: '#c3b69a', map: tex(noiseTexture('#c3b69a', 23, 8, 30)), roughness: 0.95 })),
+    grass: mat(new THREE.MeshStandardMaterial({ color: '#cfd8bf', ...grassP, roughness: 1 })),
+    path: mat(new THREE.MeshStandardMaterial({ color: '#efe6d6', ...cobble, roughness: 0.95 })),
     leaf: mat(new THREE.MeshStandardMaterial({ color: '#4e6b3c', roughness: 0.95 })),
     leafDark: mat(new THREE.MeshStandardMaterial({ color: '#2f4a2c', roughness: 0.95 })),
     bark: mat(new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 })),
-    rock: mat(new THREE.MeshStandardMaterial({ color: '#aaa496', map: tex(noiseTexture('#aaa496', 41, 3, 3, 2)), roughness: 1, flatShading: true })),
+    rock: mat(new THREE.MeshStandardMaterial({ color: '#d9d3c6', ...rockP, roughness: 1 })),
     water: mat(new THREE.MeshStandardMaterial({ color: '#7fb0b6', roughness: 0.08, metalness: 0.3, transparent: true, opacity: 0.85 })),
     hill: mat(new THREE.MeshStandardMaterial({ color: '#7b8c76', roughness: 1 })),
     blueNiche: mat(new THREE.MeshStandardMaterial({ map: tex(starVaultTexture()), roughness: 0.8 })),
@@ -103,6 +118,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
 
   // ---------- Static batching ----------
   type Key = keyof typeof M;
+  const TILE: Partial<Record<Key, number>> = { stone: 3, stoneIn: 3, stoneDark: 3, exterior: 2.2, wood: 1.4, woodDark: 1.4, rock: 2.2, path: 2.5, grass: 6 };
   const batches = new Map<Key, { geos: THREE.BufferGeometry[]; cast: boolean }>();
   const tmp = new THREE.Object3D();
   const bake = (key: Key, geo: THREE.BufferGeometry, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1, cast = true) => {
@@ -112,6 +128,20 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     tmp.updateMatrix();
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(tmp.matrix);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    const tile = TILE[key];
+    if (tile) {
+      // Box mapping in world metres so photo textures keep their real scale on every wall.
+      const pos = g.attributes.position as THREE.BufferAttribute;
+      const nor = g.attributes.normal as THREE.BufferAttribute;
+      const uvA = g.attributes.uv as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i += 1) {
+        const nx = Math.abs(nor.getX(i)), ny = Math.abs(nor.getY(i)), nz = Math.abs(nor.getZ(i));
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        if (ny >= nx && ny >= nz) uvA.setXY(i, x / tile, z / tile);
+        else if (nx >= nz) uvA.setXY(i, z / tile, y / tile);
+        else uvA.setXY(i, x / tile, y / tile);
+      }
+    }
     geo.dispose();
     const b = batches.get(key) ?? { geos: [], cast: false };
     b.geos.push(g);
@@ -193,8 +223,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   const PIERS = [-17, -11, -5, 1, 7, 13];
 
   // ---------- Ground ----------
-  const grass = mesh(new THREE.PlaneGeometry(260, 260), M.grass, 0, -0.02, 40);
-  grass.rotation.x = -Math.PI / 2;
+  bake('grass', new THREE.PlaneGeometry(260, 260, 1, 1), 0, -0.02, 40, -Math.PI / 2, 0, 0, 1, 1, 1, false);
   const floor = mesh(new THREE.PlaneGeometry(W * 2, Z_W - Z_E), M.floor, 0, 0.001, (Z_W + Z_E) / 2);
   floor.rotation.x = -Math.PI / 2;
   const apseFloor = mesh(new THREE.CircleGeometry(APSE_R, 32, 0, Math.PI), M.floor, 0, 0.002, Z_E);
@@ -300,12 +329,33 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     for (let i = 0; i < p.count; i += 1) uv.setXY(i, p.getX(i) / w + 0.5, p.getY(i) / h);
     return g;
   };
-  const glassStyles = ['figure', 'medallion', 'medallion', 'figure', 'grisaille'] as const;
-  const glassTex = [0, 1, 2, 3, 4, 5].map(i => stainedGlassTexture(11 + i * 7, glassStyles[i % glassStyles.length]));
-  const glassMatsPool = glassTex.map(t => glassMaterial(t, 1.0));
-  const window3D = (x: number, y: number, z: number, w: number, h: number, facing: number, matIndex: number) => {
+  // Real stained glass: rectified photographs of Chartres Cathedral windows (public domain).
+  const glassImages = new Map<string, THREE.Texture>();
+  const glassPools: { id: string; x: number; z: number; w: number; l: number }[] = [];
+  const glassFor = (id: string, w: number, h: number, offset = 0.5) => {
+    let base = glassImages.get(id);
+    if (!base) {
+      base = tex(loader.load(image(id).src));
+      base.colorSpace = THREE.SRGBColorSpace;
+      glassImages.set(id, base);
+    }
+    const t = tex(base.clone());
+    const [iw, ih] = image(id).size;
+    const A = ih / iw, a = h / w;
+    if (A > a) { t.repeat.set(1, a / A); t.offset.set(0, (1 - a / A) * offset); }
+    else { t.repeat.set(A / a, 1); t.offset.set((1 - A / a) / 2, 0); }
+    t.needsUpdate = true;
+    return glassMaterial(t, 1.08);
+  };
+  // Lower aisle windows and clerestory: the illustrated windows supplied for this project
+  // (figures of Christ, Our Lady, the apostles and Gospel scenes); the apse keeps Chartres glass.
+  const ref = (n: number) => `ref-w${String(n).padStart(2, '0')}`;
+  const AISLE_GLASS = [16, 17, 20, 24, 25, 18, 22, 23, 19, 26, 21].map(ref);
+  const HIGH_GLASS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(ref);
+  const APSE_GLASS = ['glass-chartres-103', 'glass-chartres-104', 'glass-chartres-000', 'glass-chartres-105', 'glass-chartres-106'];
+  const window3D = (x: number, y: number, z: number, w: number, h: number, facing: number, glass: THREE.Material) => {
     const g = lancetGeometry(w, h);
-    const m = new THREE.Mesh(g, glassMatsPool[matIndex % glassMatsPool.length]);
+    const m = new THREE.Mesh(g, glass);
     m.position.set(x, y, z);
     m.rotation.y = facing;
     group.add(m);
@@ -320,25 +370,31 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   for (const s of [-1, 1]) {
     for (let i = 0; i < PIERS.length - 1; i += 1) {
       const z = (PIERS[i] + PIERS[i + 1]) / 2;
-      window3D(s * (W - 0.02), 2.4, z, 1.9, 5.4, s < 0 ? Math.PI / 2 : -Math.PI / 2, i + (s > 0 ? 3 : 0));
+      window3D(s * (W - 0.02), 2.4, z, 1.9, 5.4, s < 0 ? Math.PI / 2 : -Math.PI / 2, glassFor(AISLE_GLASS[(i + (s > 0 ? 5 : 0)) % AISLE_GLASS.length], 1.9, 5.4, 0.35));
+      // Sun from the south throws the window's colours across the aisle floor.
+      if (s < 0) glassPools.push({ id: AISLE_GLASS[i % AISLE_GLASS.length], x: -W + 2.3, z, w: 1.5, l: 3.8 });
     }
   }
   // Clerestory: paired lancets in every bay.
   for (const s of [-1, 1]) {
     for (let i = 0; i < PIERS.length - 1; i += 1) {
       const z = (PIERS[i] + PIERS[i + 1]) / 2;
-      for (const dz of [-1.0, 1.0]) window3D(s * (NAVE + 0.01), 13.4, z + dz, 1.3, 4.6, s < 0 ? Math.PI / 2 : -Math.PI / 2, i * 2 + (dz > 0 ? 1 : 0));
+      for (const dz of [-1.0, 1.0]) window3D(s * (NAVE + 0.01), 13.4, z + dz, 1.3, 4.6, s < 0 ? Math.PI / 2 : -Math.PI / 2, glassFor(HIGH_GLASS[(i * 2 + (dz > 0 ? 1 : 0) + (s > 0 ? 2 : 0)) % HIGH_GLASS.length], 1.3, 4.6, dz > 0 ? 0.2 : 0.7));
     }
   }
   // Apse: five tall lancets around the sanctuary.
   for (let k = 0; k < 5; k += 1) {
     const a = ((k - 2) / 2) * (Math.PI / 3);
     const x = Math.sin(a) * (APSE_R + 0.15), z = Z_E - Math.cos(a) * (APSE_R + 0.15);
-    window3D(x, 6.0, z, 1.5, 10.5, -a, k === 2 ? 0 : k + 1);
+    window3D(x, 6.0, z, 1.5, 10.5, -a, glassFor(APSE_GLASS[k], 1.5, 10.5, 0.5));
   }
   // West rose window (seen from the nave, and from the plaza outside).
-  const roseTex = tex(roseWindowTexture());
-  const rose = mesh(new THREE.CircleGeometry(3.3, 64), mat(new THREE.MeshBasicMaterial({ map: roseTex, side: THREE.DoubleSide, toneMapped: false })), 0, 15.2, Z_W - 0.02);
+  // North rose of Notre-Dame de Paris (photograph, CC BY-SA 4.0 Krzysztof Mizera).
+  const roseTex = tex(loader.load(image('rose-notre-dame').src));
+  roseTex.colorSpace = THREE.SRGBColorSpace;
+  const roseInTex = tex(loader.load(image('ref-rose').src));
+  roseInTex.colorSpace = THREE.SRGBColorSpace;
+  const rose = mesh(new THREE.CircleGeometry(3.3, 64), mat(new THREE.MeshBasicMaterial({ map: roseInTex, side: THREE.DoubleSide, toneMapped: false })), 0, 15.2, Z_W - 0.02);
   rose.rotation.y = Math.PI;
   const roseOut = mesh(new THREE.CircleGeometry(3.3, 64), mat(new THREE.MeshBasicMaterial({ map: roseTex, color: '#8c7f74', toneMapped: false })), 0, 15.2, Z_W + 0.82);
   roseOut.rotation.y = 0;
@@ -347,9 +403,12 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
 
   // ---------- Light: shafts, coloured pools, dust ----------
   const beamTex = tex(beamTexture());
+  const poolTex0 = tex(glowTexture('rgba(255,255,255,1)', 'rgba(160,160,160,0.6)'));
   const beams: THREE.Mesh[] = [];
-  const beamMat = mat(new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, color: '#ffe2b0', opacity: 0.3 }));
+  const BEAM_TINTS = ['#ffdca6', '#ffc9b5', '#d6dcff', '#ffe7b8', '#f6c8e6'];
+  const beamMats = BEAM_TINTS.map(c => mat(new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, color: c, opacity: 0.3 })));
   for (let i = 0; i < PIERS.length - 1; i += 1) {
+    const beamMat = beamMats[i % beamMats.length];
     const z = (PIERS[i] + PIERS[i + 1]) / 2;
     // Sunlight enters through the south clerestory (x = -NAVE) and falls across the nave.
     const top = V(-NAVE, 15.5, z), bottom = V(-1.0 + (i % 2) * 1.5, 0.05, z + 1.2);
@@ -365,14 +424,19 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     beam2.rotateY(Math.PI / 2);
     group.add(beam2);
     beams.push(beam2);
+    glassPools.push({ id: HIGH_GLASS[(i * 2) % HIGH_GLASS.length], x: bottom.x, z: bottom.z, w: 1.3, l: 3.4 });
   }
-  const poolTex = tex(glowTexture('rgba(255,255,255,0.9)', 'rgba(255,255,255,0.25)'));
-  const poolColors = ['#d23c4c', '#3c62d2', '#e0b44a', '#4fae7a', '#9a5ad6'];
-  const rnd = seeded(99);
-  for (let i = 0; i < 16; i += 1) {
-    const p = mesh(new THREE.PlaneGeometry(2.6, 1.5), mat(new THREE.MeshBasicMaterial({ map: poolTex, color: poolColors[i % poolColors.length], transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending })), -5 + rnd() * 9, 0.015 + i * 0.0005, -14 + rnd() * 30);
+  // Coloured light on the floor: the window's own picture, stretched along the sun's direction.
+  const poolMats: THREE.MeshBasicMaterial[] = [];
+  for (const g of glassPools) {
+    const t = tex(new THREE.TextureLoader().load(image(g.id).src));
+    t.colorSpace = THREE.SRGBColorSpace;
+    const m = mat(new THREE.MeshBasicMaterial({ map: t, alphaMap: poolTex0, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    poolMats.push(m);
+    const p = mesh(new THREE.PlaneGeometry(g.w, g.l), m, g.x, 0.016, g.z);
     p.rotation.x = -Math.PI / 2;
-    p.rotation.z = rnd() * Math.PI;
+    p.rotation.z = Math.PI / 2 + 0.25; // long side runs east–west, skewed with the sun
+    p.receiveShadow = false;
   }
   const dustCount = 700;
   const dustPos = new Float32Array(dustCount * 3);
@@ -412,6 +476,33 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     cyl('wax', r, r, h, x, y + h / 2, z, 12);
     if (lit) addFlame(x, y + h + 0.01, z, 1);
   };
+
+  // Standing candelabra on the nave piers, like the ones lit for Sunday Mass.
+  const candleLights: THREE.PointLight[] = [];
+  PIERS.forEach((pz, i) => {
+    for (const s of [-1, 1]) {
+      const x = s * (NAVE - 1.05), z = pz;
+      cyl('gold', 0.2, 0.26, 0.08, x, 0.04, z, 16);
+      cyl('iron', 0.03, 0.045, 1.55, x, 0.85, z, 10);
+      cyl('gold', 0.06, 0.06, 0.06, x, 1.0, z, 12);
+      // Five branches on a curved arm, candles at slightly different heights.
+      for (let k = -2; k <= 2; k += 1) {
+        const bx = x, bz = z + k * 0.17;
+        const h = 1.72 - Math.abs(k) * 0.07;
+        if (k !== 0) bake('gold', new THREE.CylinderGeometry(0.012, 0.012, Math.abs(k) * 0.17 + 0.02, 6), bx, h - 0.02, z + k * 0.085, Math.PI / 2, 0, 0, 1, 1, 1, false);
+        cyl('gold', 0.035, 0.02, 0.05, bx, h, bz, 10);
+        candle(bx, h + 0.025, bz, 0.24, 0.018);
+      }
+      block(x, z, 0.28, 0.45, true);
+      if (i % 2 === 0) {
+        const l = new THREE.PointLight('#ffb763', 5.5, 7.5, 1.8);
+        l.position.set(x, 2.1, z);
+        l.userData.base = 5.5;
+        group.add(l);
+        candleLights.push(l);
+      }
+    }
+  });
 
   // ---------- Sanctuary ----------
   // Raised floor with three steps and a communion rail; the sanctuary itself is not walked into.
@@ -607,6 +698,50 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   maryLabel.position.set(maryX, 6.6, maryZ + 0.4);
   group.add(maryLabel);
 
+  // ---------- Paintings (public-domain masterpieces) ----------
+  const painting = (id: string, x: number, y: number, z: number, h: number, ry: number) => {
+    const [iw, ih] = image(id).size;
+    const w = h * (iw / ih);
+    const t = tex(loader.load(image(id).src));
+    t.colorSpace = THREE.SRGBColorSpace;
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    g.rotation.y = ry;
+    group.add(g);
+    const canvas = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat(new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.18 })));
+    canvas.position.z = 0.06;
+    g.add(canvas);
+    const fw = 0.16;
+    for (const [fx, fy, fwid, fh] of [[0, h / 2 + fw / 2, w + fw * 2, fw], [0, -h / 2 - fw / 2, w + fw * 2, fw], [-w / 2 - fw / 2, 0, fw, h], [w / 2 + fw / 2, 0, fw, h]]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(fwid, fh, 0.12), M.gold);
+      bar.position.set(fx, fy, 0.06);
+      g.add(bar);
+    }
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, h + 0.4, 0.05), M.woodDark);
+    g.add(back);
+    return g;
+  };
+  // Titian's Assumption above a side altar at the east end of the south aisle.
+  const tX = 11.0;
+  painting('painting-titian', tX, 4.15, Z_E + 0.08, 4.6, 0);
+  box('stone', 2.4, 1.0, 0.85, tX, 0.5, Z_E + 0.9, true);
+  box('linen', 2.5, 0.03, 0.95, tX, 1.015, Z_E + 0.9);
+  box('gold', 0.8, 0.4, 0.03, tX, 0.6, Z_E + 1.33);
+  for (const dx of [-0.8, -0.4, 0.4, 0.8]) { cyl('gold', 0.04, 0.06, 0.06, tX + dx, 1.06, Z_E + 0.75, 10); candle(tX + dx, 1.09, Z_E + 0.75, 0.32, 0.02); }
+  const titianSpot = new THREE.SpotLight('#fff0d8', 45, 12, 0.5, 0.6, 1.5);
+  titianSpot.position.set(tX - 1.0, 7.5, Z_E + 5.5);
+  titianSpot.target.position.set(tX, 4.0, Z_E);
+  group.add(titianSpot, titianSpot.target);
+  // Raphael and Murillo on the west wall of the aisles, facing the altar.
+  painting('painting-raphael', -10.9, 4.9, Z_W - 0.05, 3.6, Math.PI);
+  painting('painting-murillo', 10.9, 4.9, Z_W - 0.05, 3.6, Math.PI);
+  for (const px of [-10.9, 10.9]) {
+    const l = new THREE.SpotLight('#ffeedd', 22, 9, 0.6, 0.7, 1.5);
+    l.position.set(px, 8.2, Z_W - 4);
+    l.target.position.set(px, 4.9, Z_W);
+    group.add(l, l.target);
+  }
+
   // ---------- Votive candle stand (in front of Our Lady) ----------
   const standX = -8.85, standZ = maryZ + 1.3;
   const slots: THREE.Vector3[] = [];
@@ -722,7 +857,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   let releaseT = -1;
   const penitent = { x: cfX + 0.15, z: cfZ - 1.25 };
   const confessional: Confessional = {
-    approach: { x: cfX - cfW / 2 - 0.85, z: cfZ - 1.25, yaw: Math.PI / 2 },
+    approach: { x: cfX - cfW / 2 - 0.85, z: cfZ - 1.25, yaw: -Math.PI / 2 }, // facing +X (the booth)
     inside: { x: penitent.x, z: penitent.z - 0.05, yaw: Math.PI },
     cameraEye: V(penitent.x - 0.42, 1.72, penitent.z - 0.48),
     cameraLook: V(cfX + 0.1, 1.25, cfZ - 0.62),
@@ -807,12 +942,9 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
 
   // ---------- Exterior: plaza, garden, fountain, grotto ----------
   // Plaza paving in front of the west front, then a long path to the garden.
-  const plaza = mesh(new THREE.PlaneGeometry(30, 15), M.path, 0, 0.004, FZ + 7.5);
-  plaza.rotation.x = -Math.PI / 2;
-  const walk = mesh(new THREE.PlaneGeometry(4.0, 44), M.path, 0, 0.005, FZ + 15 + 22);
-  walk.rotation.x = -Math.PI / 2;
-  const crossWalk = mesh(new THREE.PlaneGeometry(26, 3.2), M.path, 7, 0.006, 49.5);
-  crossWalk.rotation.x = -Math.PI / 2;
+  bake('path', new THREE.PlaneGeometry(30, 15), 0, 0.004, FZ + 7.5, -Math.PI / 2, 0, 0, 1, 1, 1, false);
+  bake('path', new THREE.PlaneGeometry(4.0, 44), 0, 0.005, FZ + 15 + 22, -Math.PI / 2, 0, 0, 1, 1, 1, false);
+  bake('path', new THREE.PlaneGeometry(26, 3.2), 7, 0.006, 49.5, -Math.PI / 2, 0, 0, 1, 1, 1, false);
   // Steps up to the portal (decorative edge stones on the plaza).
   for (let k = 0; k < 3; k += 1) box('stoneDark', 9 - k * 0.8, 0.06, 0.4, 0, 0.03, FZ + 0.9 + k * 0.4);
   // Hedges lining the walk and plaza.
@@ -930,14 +1062,13 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   group.add(grottoLabel);
 
   // Sky dome with a low sun glow, and a ring of distant hills.
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(200, 32, 16), mat(new THREE.MeshBasicMaterial({ map: tex(skyTexture()), side: THREE.BackSide, fog: false, depthWrite: false })));
+  // Photographed sky (Poly Haven HDRI, tonemapped, CC0) on an equirectangular dome.
+  const skyTex = tex(loader.load('/textures/sky/kloofendal_puresky_4k.jpg'));
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(200, 48, 24), mat(new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false })));
   sky.position.set(0, -20, 30);
   sky.renderOrder = -10;
   group.add(sky);
-  const sun = new THREE.Sprite(mat(new THREE.SpriteMaterial({ map: tex(glowTexture('rgba(255,248,225,1)', 'rgba(255,200,130,0.5)')), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })));
-  sun.position.set(-120, 28, 140);
-  sun.scale.set(70, 70, 1);
-  group.add(sun);
   const hills = seeded(12);
   for (let k = 0; k < 28; k += 1) {
     const a = (k / 28) * Math.PI * 2;
@@ -971,7 +1102,9 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     }
     haloMat.opacity = 0.45 + Math.sin(time * 7) * 0.05;
     standLight.intensity = 4 + Math.sin(time * 11) * 0.5 + slotLit.filter(Boolean).length * 0.12;
-    beamMat.opacity = 0.2 + 0.12 * indoor + Math.sin(time * 0.4) * 0.04;
+    beamMats.forEach((m, i) => { m.opacity = 0.2 + 0.13 * indoor + Math.sin(time * 0.4 + i * 1.3) * 0.05; });
+    poolMats.forEach((m, i) => { m.opacity = (0.42 + Math.sin(time * 0.4 + i * 1.3) * 0.08) * indoor; });
+    candleLights.forEach((l, i) => { l.intensity = l.userData.base * (1 + Math.sin(time * 9 + i * 2.1) * 0.07 + Math.sin(time * 23 + i) * 0.05); });
     // Dust drifts upward slowly and wraps.
     const p = dust.geometry.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < dustCount; i += 1) {
@@ -1022,7 +1155,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     candleStand,
     confessional,
     maryInside: maryKneel,
-    grotto: { x: gX - 2.3, z: gZ, yaw: Math.PI / 2 },
+    grotto: { x: gX - 2.3, z: gZ, yaw: -Math.PI / 2 }, // facing +X (the statue)
     start: { x: 0, z: 14.5, yaw: 0 },
     indoorAt,
     update,

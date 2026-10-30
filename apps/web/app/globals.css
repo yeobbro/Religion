@@ -521,3 +521,91 @@
 }
 .confession-panel{z-index:40}
 .world-action-bar[hidden]{display:none!important}
+
+/* ---------- /catholic: entry, top-left chips, music, credits, rosary ---------- */
+.catholic-world{position:fixed;inset:0;overflow:hidden;background:#15110d;font-family:'Noto Sans KR',system-ui,sans-serif}
+.immersive-avatar-stage [hidden]{display:none!important}
+.world-topleft{position:absolute;z-index:30;left:14px;top:14px;display:flex;gap:8px;max-width:calc(100vw - 28px)}
+.world-chip{display:flex;align-items:center;gap:6px;min-height:32px;padding:0 13px;border:1px solid #f1e3c455;border-radius:999px;background:rgba(18,14,11,.72);color:#f4ead6;font-size:11px;font-weight:600;cursor:pointer;backdrop-filter:blur(10px);white-space:nowrap;overflow:hidden}
+.world-chip:hover{border-color:#f1e3c4aa}
+.world-chip.music{max-width:min(340px,60vw)}
+.world-chip .chip-title{overflow:hidden;text-overflow:ellipsis;font-weight:500;color:#e8d8b6}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#8a8070;flex:none}
+.world-chip.music.on .live-dot{background:#ff5d4d;box-shadow:0 0 0 0 #ff5d4d88;animation:livePulse 1.8s infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 #ff5d4d88}70%{box-shadow:0 0 0 7px #ff5d4d00}100%{box-shadow:0 0 0 0 #ff5d4d00}}
+.panel-x{width:28px;height:28px;border:0;border-radius:50%;background:#ffffff14;color:#f4ead6;font-size:18px;line-height:1;cursor:pointer}
+.music-panel{position:absolute;z-index:31;left:14px;top:54px;width:min(340px,calc(100vw - 28px));max-height:calc(100vh - 220px);overflow:auto;padding:14px 16px;border:1px solid #e4c88d44;border-radius:16px;background:rgba(18,14,11,.88);color:#efe4cd;backdrop-filter:blur(14px);box-shadow:0 18px 50px #0009}
+.music-panel header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.music-panel header strong{font-size:12px;color:#f1d9a4;font-weight:600}
+.music-now{margin:0 0 10px;display:grid;gap:3px}
+.music-now b{font-family:'Noto Serif KR',serif;font-size:15px;font-weight:500;color:#fff4dc}
+.music-now span{font-size:11px;color:#c9bca2}
+.music-progress{height:3px;border-radius:3px;background:#ffffff1c;overflow:hidden}
+.music-progress i{display:block;height:100%;background:linear-gradient(90deg,#e9c77d,#fff0c8)}
+.music-time{display:flex;justify-content:space-between;font-size:10px;color:#a99d86;margin:4px 0 10px}
+.music-controls{display:flex;align-items:center;gap:8px}
+.music-controls button{border:0;border-radius:999px;padding:8px 13px;background:#e9d6ad;color:#2b2416;font-weight:700;font-size:11px;cursor:pointer}
+.music-controls button+button{background:#ffffff14;color:#f4ead6;padding:8px 10px}
+.music-controls input{flex:1;accent-color:#e9c77d}
+.music-note{font-size:10.5px;line-height:1.6;color:#b9ad95;margin:10px 0 8px}
+.music-list{margin:0;padding:0 0 0 18px;font-size:11px;color:#cfc3aa;display:grid;gap:5px}
+.music-list li{display:flex;justify-content:space-between;gap:10px}
+.music-list li em{font-style:normal;color:#8f846f}
+.music-list li.now{color:#ffe7b0;font-weight:600}
+.credits-backdrop{position:absolute;inset:0;z-index:50;background:#000a;display:grid;place-items:center;padding:16px}
+.credits-panel{width:min(720px,100%);max-height:min(80vh,760px);overflow:auto;padding:20px 22px;border-radius:18px;background:#16120e;border:1px solid #e4c88d44;color:#e9dfc9;box-shadow:0 24px 80px #000c}
+.credits-panel header{display:flex;justify-content:space-between;align-items:center}
+.credits-panel h2{margin:0;font-family:'Noto Serif KR',serif;font-weight:500;font-size:20px;color:#f1d9a4}
+.credits-panel h3{margin:18px 0 6px;font-size:12px;color:#f1d9a4;letter-spacing:.04em}
+.credits-lead{font-size:12px;line-height:1.7;color:#c9bca2;margin:10px 0 0}
+.credits-panel ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:11.5px;line-height:1.55;color:#d9cdb4}
+.credits-panel b{font-weight:600;color:#f6ead1}
+.credits-panel a{color:#e9c77d}
+.entry-overlay{position:absolute;inset:0;z-index:40;display:grid;place-items:center;padding:16px;background:radial-gradient(ellipse at 50% 40%,#0000 0%,#0006 60%,#000b 100%)}
+.entry-card{width:min(460px,100%);padding:26px 24px 20px;border-radius:22px;background:rgba(20,15,11,.8);border:1px solid #e4c88d55;color:#efe4cd;backdrop-filter:blur(16px);box-shadow:0 30px 90px #000c;display:grid;gap:12px}
+.entry-kicker{margin:0;font-size:10px;letter-spacing:.32em;color:#d7b878}
+.entry-card h1{margin:-4px 0 0;font-family:'Noto Serif KR',serif;font-weight:500;font-size:30px;color:#fff3da}
+.entry-sub{margin:0;font-size:12.5px;line-height:1.7;color:#cdbfa4}
+.entry-name{display:grid;gap:6px;font-size:11px;color:#d7c7a6}
+.entry-name input{height:44px;border-radius:12px;border:1px solid #e4c88d55;background:#0f0c09cc;color:#fff3da;padding:0 14px;font-size:15px;font-family:inherit;outline:none}
+.entry-name input:focus{border-color:#e9c77d}
+.entry-outfits{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.entry-outfits legend{font-size:11px;color:#d7c7a6;margin-bottom:6px;padding:0}
+.entry-outfits label{position:relative;display:grid;justify-items:center;gap:4px;padding:10px 4px 8px;border-radius:14px;border:1px solid #ffffff1f;background:#ffffff08;cursor:pointer;text-align:center;transition:border-color .2s,background .2s}
+.entry-outfits label.on{border-color:#e9c77d;background:#e9c77d1c}
+.entry-outfits input{position:absolute;opacity:0;pointer-events:none}
+.entry-outfits i{width:34px;height:34px;border-radius:50%;border:1px solid #ffffff44;box-shadow:inset 0 -6px 10px #0003}
+.entry-outfits b{font-size:11.5px;font-weight:600;color:#f6ead1}
+.entry-outfits small{font-size:9.5px;color:#a99d86;line-height:1.3}
+.entry-outfits label:has(input:focus-visible){outline:2px solid #e9c77d;outline-offset:2px}
+.entry-go{height:48px;border:0;border-radius:999px;background:linear-gradient(180deg,#f3e2b8,#d9b979);color:#2b2214;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px #e9c77d33}
+.entry-go:disabled{opacity:.6;cursor:progress}
+.entry-foot{margin:0;text-align:center;font-size:10px;color:#8f846f}
+@media(max-width:520px){.entry-outfits{grid-template-columns:repeat(2,1fr)}.entry-card h1{font-size:25px}}
+
+.rosary-panel{position:absolute;z-index:22;right:14px;top:58px;width:min(300px,calc(100vw - 28px));padding:12px 14px;border-radius:18px;border:1px solid #e4c88d44;background:rgba(18,14,11,.86);color:#efe4cd;backdrop-filter:blur(14px);box-shadow:0 18px 50px #0009;display:grid;gap:8px}
+.rosary-panel header{display:flex;justify-content:space-between;align-items:center}
+.rosary-panel header div{display:grid;gap:2px}
+.rosary-panel header strong{font-family:'Noto Serif KR',serif;font-weight:500;font-size:16px;color:#f6e3b4}
+.rosary-panel header span{font-size:10.5px;color:#b9ad95}
+.rosary-close{width:28px;height:28px;border:0;border-radius:50%;background:#ffffff14;color:#f4ead6;font-size:18px;cursor:pointer}
+.rosary-mysteries{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.rosary-mysteries button{border:1px solid #ffffff1f;border-radius:999px;background:transparent;color:#cfc3aa;font-size:10.5px;padding:5px 0;cursor:pointer}
+.rosary-mysteries button[aria-checked=true]{background:#e9c77d26;border-color:#e9c77d;color:#ffe7b0}
+.rosary-beads{outline:none;border-radius:14px;touch-action:none;cursor:ns-resize}
+.rosary-beads:focus-visible{box-shadow:0 0 0 2px #e9c77d66}
+.rosary-beads svg{display:block;width:100%;height:auto;max-height:min(40vh,330px)}
+.rosary-center-big{fill:#f6e3b4;font-size:22px;font-family:'Noto Serif KR',serif}
+.rosary-center-small{fill:#a99d86;font-size:11px}
+.rosary-now{display:grid;gap:3px;text-align:center;min-height:42px}
+.rosary-now strong{font-size:14px;color:#fff1cf;font-weight:600}
+.rosary-now span{font-size:11px;color:#cdbfa4;line-height:1.5}
+.rosary-controls{display:grid;grid-template-columns:1fr auto auto 1fr;gap:5px}
+.rosary-controls button{border:1px solid #ffffff22;border-radius:999px;background:#ffffff0d;color:#efe4cd;font-size:10.5px;padding:7px 8px;cursor:pointer}
+.rosary-controls button:hover{border-color:#e9c77d}
+.rosary-hint{margin:0;font-size:9.5px;color:#8f846f;text-align:center}
+@media(max-width:760px),(pointer:coarse){.rosary-panel{top:54px;right:10px;width:min(260px,calc(100vw - 20px))}.rosary-beads svg{max-height:30vh}}
+
+/* After a confession the panel steps aside so the rising light stays in view. */
+.confession-panel.released{place-items:end center;background:none;padding-bottom:34px}
+.confession-panel.released .confession-release{background:#120e0b88;padding:14px 18px}

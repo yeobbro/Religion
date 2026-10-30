@@ -9,9 +9,9 @@ type Intention = { id: string; text: string; createdAt: string };
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
-const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || '/audio/veni-sancte-spiritus.ogg';
-const ambientMusicUrl = '/audio/wholesome-kevin-macleod.ogg';
-const gardenAudioUrl = '/audio/garden-breeze-birds.ogg';
+const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || '/audio/veni-sancte-spiritus.mp3';
+const ambientMusicUrl = '/audio/wholesome-kevin-macleod.mp3';
+const gardenAudioUrl = '/audio/garden-breeze-birds.mp3';
 type ImmersiveAudioMode = 'off' | 'chant' | 'ambient';
 const chapelPhotoUrl = 'https://images.unsplash.com/photo-1759432916468-d44411b5a661?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=2400';
 
@@ -230,7 +230,7 @@ export default function ChapelExperience() {
           </div>
           <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
         </header>
-        <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene displayName={baptismalName.trim()} /></section>
+        <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene visitor={{ name: baptismalName.trim() || "순례자", outfit: "casual" }} /></section>
         <audio
           ref={audioRef}
           loop

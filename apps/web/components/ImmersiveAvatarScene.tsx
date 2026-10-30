@@ -2,17 +2,29 @@
 
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import * as THREE from 'three';
-import { Avatar } from '@/lib/world/avatar';
+import { Avatar, type Outfit } from '@/lib/world/avatar';
 import { buildSite, type Blocker, type Site } from '@/lib/world/cathedral';
-import { glowTexture } from '@/lib/world/textures';
+import { createNpcs } from '@/lib/world/npcs';
+import { beamTexture, glowTexture } from '@/lib/world/textures';
+import RosaryPanel from './RosaryPanel';
 
-type Props = { displayName: string };
+export type Visitor = { name: string; outfit: Outfit };
+type Props = {
+  /** Null until the visitor enters; the world renders behind the entry screen meanwhile. */
+  visitor: Visitor | null;
+  /** 1 indoors … 0 outdoors, for the soundscape. */
+  onIndoor?: (v: number) => void;
+  /** Called once the first frame has rendered. */
+  onReady?: () => void;
+};
 
 type Action =
   | 'cross' | 'prayer' | 'rosary' | 'bow' | 'greet' | 'seat' | 'veil' | 'candle' | 'confess' | 'mary';
 
 type Api = {
   act: (a: Action) => void;
+  setVisitor: (v: Visitor) => void;
+  rosaryStep: (label: string) => void;
   dip: () => void;
   lightCandle: (intention: string) => void;
   finishConfession: () => void;
@@ -130,7 +142,7 @@ const findPath = (blockers: Blocker[], bounds: Site['bounds'], sx: number, sz: n
   return out;
 };
 
-export default function ImmersiveAvatarScene({ displayName }: Props) {
+export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<Api | null>(null);
   const [notice, setNotice] = useState('바닥을 클릭하거나 WASD·조이스틱으로 이동하고, 아래 동작을 선택하세요.');
@@ -143,6 +155,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
   const [confessionText, setConfessionText] = useState('');
   const [releasedText, setReleasedText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [rosaryOpen, setRosaryOpen] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const [outfit, setOutfit] = useState<Outfit>('casual');
+  const onIndoorRef = useRef(onIndoor);
+  onIndoorRef.current = onIndoor;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -177,10 +196,121 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     const site = buildSite(renderer);
     scene.add(site.group);
-    const avatar = new Avatar({ name: displayName });
+    const npcs = createNpcs(site);
+    scene.add(npcs.group);
+    let avatar = new Avatar({ name: '', showName: false });
     avatar.root.position.set(site.start.x, 0, site.start.z);
-    avatar.root.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    avatar.root.visible = false;
     scene.add(avatar.root);
+    let inWorld = false;
+
+    // ----- Ascension: after a confession the written prayer becomes light and rises to heaven -----
+    const orbTex = glowTexture('rgba(255,253,240,1)', 'rgba(255,214,140,0.5)');
+    const orbMat = new THREE.SpriteMaterial({ map: orbTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+    const orb = new THREE.Sprite(orbMat);
+    orb.visible = false;
+    const halo = new THREE.Sprite(orbMat.clone());
+    halo.visible = false;
+    const orbLight = new THREE.PointLight('#ffe2a8', 0, 9, 1.4);
+    scene.add(orb, halo, orbLight);
+    const moteN = 220;
+    const motePos = new Float32Array(moteN * 3);
+    const moteSeed = new Float32Array(moteN * 4);
+    const moteGeo = new THREE.BufferGeometry();
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+    const moteMat = new THREE.PointsMaterial({ size: 0.07, map: orbTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, color: '#ffe9b8' });
+    const motes = new THREE.Points(moteGeo, moteMat);
+    motes.frustumCulled = false;
+    scene.add(motes);
+    const rayTex = beamTexture();
+    const rays = new THREE.Group();
+    const rayMats: THREE.MeshBasicMaterial[] = [];
+    for (let i = 0; i < 14; i += 1) {
+      const m = new THREE.MeshBasicMaterial({ map: rayTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, side: THREE.DoubleSide, color: '#fff0c8' });
+      rayMats.push(m);
+      const g = new THREE.PlaneGeometry(0.9, 12);
+      g.translate(0, -6, 0); // bright end at the burst point
+      const ray = new THREE.Mesh(g, m);
+      ray.rotation.z = (i / 14) * Math.PI * 2;
+      ray.rotation.y = (i % 2) * 0.6;
+      rays.add(ray);
+    }
+    rays.visible = false;
+    scene.add(rays);
+    let asc = -1;
+    let ascPath: THREE.CatmullRomCurve3 | null = null;
+    const ascFrom = new THREE.Vector3();
+    const ASC_GATHER = 1.8, ASC_RISE = 6.2, ASC_BURST = 3.2;
+    const startAscension = () => {
+      avatar.chest.updateMatrixWorld(true);
+      avatar.chest.localToWorld(ascFrom.set(0, 0.0, -0.35));
+      const f = ascFrom;
+      // Out of the side aisle under the arcade, then straight up the nave into the vault.
+      ascPath = new THREE.CatmullRomCurve3([
+        f.clone(), new THREE.Vector3(f.x - 1.5, f.y + 0.5, f.z), new THREE.Vector3(f.x - 3.2, 4.2, f.z - 0.6),
+        new THREE.Vector3(8.4, 7.4, f.z - 1.6), new THREE.Vector3(4.5, 10.5, f.z - 2.6), new THREE.Vector3(1.2, 16, f.z - 4),
+        new THREE.Vector3(0, 23.4, f.z - 5.5),
+      ], false, 'centripetal');
+      for (let i = 0; i < moteN; i += 1) {
+        const a = Math.random() * Math.PI * 2, r = 0.5 + Math.random() * 1.4, y = (Math.random() - 0.3) * 1.6;
+        moteSeed.set([a, r, y, Math.random()], i * 4);
+      }
+      asc = 0;
+      orb.visible = halo.visible = motes.visible = true;
+    };
+    const updateAscension = (dt: number, time: number) => {
+      if (asc < 0 || !ascPath) return;
+      asc += dt;
+      const total = ASC_GATHER + ASC_RISE + ASC_BURST;
+      const riseU = THREE.MathUtils.clamp((asc - ASC_GATHER) / ASC_RISE, 0, 1);
+      const ease = riseU < 0.5 ? 2 * riseU * riseU : 1 - Math.pow(-2 * riseU + 2, 2) / 2;
+      const p = ascPath.getPointAt(ease);
+      orb.position.copy(p);
+      const gather = THREE.MathUtils.clamp(asc / ASC_GATHER, 0, 1);
+      const burst = THREE.MathUtils.clamp((asc - ASC_GATHER - ASC_RISE) / ASC_BURST, 0, 1);
+      const pulse = 1 + Math.sin(time * 6) * 0.06;
+      orb.scale.setScalar((0.15 + gather * 0.55 + riseU * 0.6) * pulse * (1 + burst * 3));
+      orbMat.opacity = Math.min(1, gather * 1.4) * (1 - burst);
+      orbLight.position.copy(p);
+      orbLight.intensity = 9 * orbMat.opacity + 30 * Math.sin(burst * Math.PI);
+      orbLight.distance = 9 + burst * 30;
+      // Motes swirl in from around the penitent, then stream behind the orb as a trail.
+      for (let i = 0; i < moteN; i += 1) {
+        const a = moteSeed[i * 4], r = moteSeed[i * 4 + 1], y = moteSeed[i * 4 + 2], k = moteSeed[i * 4 + 3];
+        if (asc < ASC_GATHER) {
+          const u = Math.pow(gather, 1.5 + k);
+          const ang = a + gather * 3;
+          motePos.set([ascFrom.x + Math.cos(ang) * r * (1 - u), ascFrom.y + y * (1 - u), ascFrom.z + Math.sin(ang) * r * (1 - u)], i * 3);
+        } else {
+          const lag = Math.max(0, ease - k * 0.18);
+          const q = ascPath.getPointAt(lag);
+          const spin = time * 2 + a;
+          const rad = 0.12 + k * 0.35 * (1 - burst);
+          motePos.set([q.x + Math.cos(spin) * rad, q.y + Math.sin(spin * 1.3) * rad, q.z + Math.sin(spin) * rad], i * 3);
+        }
+      }
+      moteGeo.attributes.position.needsUpdate = true;
+      moteMat.opacity = Math.min(1, asc * 1.2) * (1 - burst) * 0.9;
+      // At the top of the vault heaven opens: rays and a wide halo of light.
+      rays.visible = burst > 0;
+      if (burst > 0) {
+        rays.position.copy(p);
+        rays.lookAt(camera.position);
+        rays.rotation.z += dt * 0.25;
+        const b = Math.sin(burst * Math.PI);
+        rays.scale.setScalar(0.4 + burst * 1.1);
+        rayMats.forEach((m, i) => { m.opacity = b * (0.55 + 0.35 * Math.sin(time * 3 + i)); });
+        halo.position.copy(p);
+        halo.scale.setScalar(2 + burst * 16);
+        (halo.material as THREE.SpriteMaterial).opacity = b * 0.85;
+      }
+      if (asc > total) {
+        asc = -1;
+        orb.visible = halo.visible = motes.visible = rays.visible = false;
+        orbLight.intensity = 0;
+        say('당신의 기도가 빛이 되어 주님께 올라갔습니다. 평화를 빕니다.');
+      }
+    };
 
     // Sparkle burst used when a candle catches.
     const sparkN = 40;
@@ -209,12 +339,33 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     let onGlidesDone: (() => void) | null = null;
     let seated: { index: number; aisle: THREE.Vector3 } | null = null;
     let confessing = false;
-    let rosaryCount = 0;
-    let rosaryTimer = 0;
     let lastNearFont = false;
 
     const say = (s: string) => setNotice(s);
     const sync = () => setState({ veil: avatar.veilOn, sitting: avatar.posture === 'sit', praying: avatar.hands === 'prayer', rosary: avatar.hands === 'rosary' });
+    const setVisitor = (v: Visitor) => {
+      const old = avatar;
+      const next = new Avatar({ name: v.name, outfit: v.outfit });
+      next.root.position.copy(old.root.position);
+      next.root.rotation.y = old.root.rotation.y;
+      next.setPosture(old.posture, 0.48);
+      scene.remove(old.root);
+      old.dispose();
+      scene.add(next.root);
+      avatar = next;
+      setOutfit(v.outfit);
+      if (!inWorld) {
+        inWorld = true;
+        setEntered(true);
+        say(`${v.name}님, 평화를 빕니다. 바닥을 클릭하거나 WASD·조이스틱으로 걸어 보세요.`);
+      }
+      sync();
+    };
+    const rosaryStep = (label: string) => {
+      if (avatar.hands !== 'rosary') { avatar.setHands('rosary'); sync(); }
+      avatar.nextBead();
+      say(label);
+    };
     const faceYaw = (yaw: number) => { targetYaw = yaw; };
     let targetYaw = site.start.yaw;
     avatar.root.rotation.y = targetYaw;
@@ -263,7 +414,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (a === 'prayer') {
         const on = avatar.hands !== 'prayer';
         avatar.setHands(on ? 'prayer' : 'rest');
-        rosaryCount = 0;
+        setRosaryOpen(false);
         say(on ? '두 손을 모으고 조용히 기도합니다. 다시 누르면 손을 내립니다.' : '기도를 마쳤습니다.');
         sync();
         return;
@@ -271,9 +422,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (a === 'rosary') {
         const on = avatar.hands !== 'rosary';
         avatar.setHands(on ? 'rosary' : 'rest');
-        rosaryCount = 0;
-        rosaryTimer = 0;
-        say(on ? '묵주기도를 시작합니다. 한 알씩 넘기며 기도해요.' : '묵주기도를 마쳤습니다.');
+        setRosaryOpen(on);
+        say(on ? '묵주기도를 시작합니다. 묵주 위에서 휠을 굴려 한 알씩 넘겨 보세요.' : '묵주기도를 마쳤습니다.');
         sync();
         return;
       }
@@ -339,7 +489,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const go = () => goTo(cf.approach.x, cf.approach.z, () => {
           faceYaw(cf.approach.yaw);
           confessing = true;
-          glide([{ x: cf.inside.x, z: cf.approach.z, yaw: Math.PI / 2, dur: 1.1 }, { x: cf.inside.x, z: cf.inside.z, yaw: cf.inside.yaw, dur: 0.6 }], () => {
+          glide([{ x: cf.inside.x, z: cf.approach.z, yaw: -Math.PI / 2, dur: 1.1 }, { x: cf.inside.x, z: cf.inside.z, yaw: cf.inside.yaw, dur: 0.6 }], () => {
             cf.setCurtain(true);
             avatar.setPosture('kneel');
             avatar.setHands('prayer');
@@ -366,6 +516,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     };
     const finishConfession = () => {
       site.confessional.release();
+      site.confessional.setCurtain(false); // the light leaves the booth through the open curtain
+      startAscension();
       setConfession('released');
       say('적은 마음이 빛이 되어 올라갑니다. 이 글은 기기 밖으로 보내지거나 저장되지 않습니다.');
     };
@@ -376,7 +528,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       avatar.setHands('rest');
       cf.setCurtain(false);
       window.setTimeout(() => {
-        glide([{ x: cf.inside.x, z: cf.approach.z, yaw: -Math.PI / 2, dur: 0.6 }, { x: cf.approach.x, z: cf.approach.z, yaw: -Math.PI / 2, dur: 1.0 }], () => {
+        glide([{ x: cf.inside.x, z: cf.approach.z, yaw: Math.PI / 2, dur: 0.6 }, { x: cf.approach.x, z: cf.approach.z, yaw: Math.PI / 2, dur: 1.0 }], () => {
           confessing = false;
           sync();
           say('평화를 빕니다. 실제 고해성사는 사제와 함께 드립니다.');
@@ -386,14 +538,18 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const dip = () => {
       avatar.play('dip', { onDone: () => say('성수를 찍었습니다. 이어서 성호를 그어 보세요.') });
     };
-    apiRef.current = { act, dip, lightCandle, finishConfession, leaveConfession };
+    apiRef.current = { act, setVisitor, rosaryStep, dip, lightCandle, finishConfession, leaveConfession };
     // Development-only hook for automated visual checks (teleport and camera placement).
     if (process.env.NODE_ENV !== 'production') {
       (window as unknown as { __religion?: unknown }).__religion = {
-        act, lightCandle, finishConfession, leaveConfession, dip,
+        act, lightCandle, finishConfession, leaveConfession, dip, setVisitor,
         teleport: (x: number, z: number, y = 0) => { avatar.root.position.set(x, 0, z); targetYaw = y; avatar.root.rotation.y = y; route = []; },
         view: (vy: number, vp: number, vd: number) => { yaw = vy; pitch = vp; dist = vd; },
-        avatar,
+        get avatar() { return avatar; },
+        get orb() { return { visible: orb.visible, pos: orb.position.toArray(), opacity: orbMat.opacity, scale: orb.scale.x, asc }; },
+        ascend: (sec: number) => { for (let t = 0; t < sec; t += 1 / 30) updateAscension(1 / 30, t); },
+        cam: (x: number, y: number, z: number, lx: number, ly: number, lz: number) => { camOverride = x === undefined ? null : [new THREE.Vector3(x, y, z), new THREE.Vector3(lx, ly, lz)]; },
+        npcs,
         site,
         advance: (sec: number) => { for (let t = 0; t < sec; t += 1 / 60) { avatar.update(1 / 60, false); site.update(t, 1 / 60, 1); } },
       };
@@ -407,7 +563,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const raycaster = new THREE.Raycaster();
     const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const clickMove = (cx: number, cy: number) => {
-      if (confessing) return;
+      if (confessing || !inWorld) return;
       const r = host.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -(((cy - r.top) / r.height) * 2 - 1)), camera);
       const p = raycaster.ray.intersectPlane(ground, new THREE.Vector3());
@@ -483,6 +639,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const camLook = new THREE.Vector3();
     const tmpV = new THREE.Vector3();
     let indoor = 1;
+    let lastIndoorSent = -1;
+    let camOverride: [THREE.Vector3, THREE.Vector3] | null = null;
+    const introLook = new THREE.Vector3(0, 4.2, -21);
     let frame = 0;
     let firstFrame = true;
     const animate = () => {
@@ -493,7 +652,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
       const fwd = ((keys.has('w') || keys.has('arrowup')) ? 1 : 0) - ((keys.has('s') || keys.has('arrowdown')) ? 1 : 0) - joyY;
       const side = ((keys.has('d') || keys.has('arrowright')) ? 1 : 0) - ((keys.has('a') || keys.has('arrowleft')) ? 1 : 0) + joyX;
-      const manual = Math.abs(fwd) + Math.abs(side) > 0.08 && !confessing;
+      const manual = Math.abs(fwd) + Math.abs(side) > 0.08 && !confessing && inWorld;
       let mx = 0, mz = 0, moving = false, speed = 1;
       if (manual && !glides.length) {
         if (avatar.posture !== 'stand' || seated) {
@@ -517,7 +676,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const e = u * u * (3 - 2 * u);
         pos.lerpVectors(gl.from, gl.to, e);
         if (gl.yaw !== undefined) targetYaw = gl.yaw;
-        else if (gl.to.distanceTo(gl.from) > 0.05) targetYaw = Math.atan2(gl.to.x - gl.from.x, -(gl.to.z - gl.from.z));
+        else if (gl.to.distanceTo(gl.from) > 0.05) targetYaw = Math.atan2(-(gl.to.x - gl.from.x), -(gl.to.z - gl.from.z));
         moving = u < 1 && avatar.posture === 'stand';
         speed = 0.6;
         if (u >= 1) {
@@ -542,28 +701,16 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const nx = pos.x + mx * step, nz = pos.z + mz * step;
         if (!collides(nx, pos.z) || route.length) pos.x = THREE.MathUtils.clamp(nx, site.bounds.minX, site.bounds.maxX);
         if (!collides(pos.x, nz) || route.length) pos.z = THREE.MathUtils.clamp(nz, site.bounds.minZ, site.bounds.maxZ);
-        targetYaw = Math.atan2(mx, -mz);
+        targetYaw = Math.atan2(-mx, -mz); // avatar forward is (-sin θ, 0, -cos θ)
       }
       // Turn smoothly toward the target heading.
       let dy = targetYaw - avatar.root.rotation.y;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       avatar.root.rotation.y += dy * Math.min(1, dt * 9);
 
-      // Rosary: slide to the next bead every few seconds and count decades.
-      if (avatar.hands === 'rosary') {
-        rosaryTimer += dt;
-        if (rosaryTimer > 3.2) {
-          rosaryTimer = 0;
-          rosaryCount += 1;
-          avatar.nextBead();
-          const decade = Math.min(5, Math.floor((rosaryCount - 1) / 10) + 1);
-          const bead = ((rosaryCount - 1) % 10) + 1;
-          say(rosaryCount > 50 ? '다섯 단을 모두 바쳤습니다. 영광송으로 마칩니다.' : `묵주기도 ${decade}단 · 성모송 ${bead}/10`);
-          if (rosaryCount > 50) { avatar.setHands('rest'); sync(); }
-        }
-      }
-
       avatar.update(dt, moving, speed);
+      npcs.update(dt, time);
+      updateAscension(dt, time);
 
       // Holy water fonts.
       const nearF = site.fonts.some(f => Math.hypot(f.x - pos.x, f.z - pos.z) < 1.35);
@@ -571,12 +718,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
       // Indoor / outdoor light blend.
       indoor += (site.indoorAt(pos.x, pos.z) - indoor) * Math.min(1, dt * 2);
+      if (Math.abs(indoor - lastIndoorSent) > 0.03) { lastIndoorSent = indoor; onIndoorRef.current?.(indoor); }
       (scene.fog as THREE.Fog).color.copy(outdoorFog).lerp(indoorFog, indoor);
       (scene.fog as THREE.Fog).near = THREE.MathUtils.lerp(60, 26, indoor);
       (scene.fog as THREE.Fog).far = THREE.MathUtils.lerp(260, 95, indoor);
-      hemi.intensity = THREE.MathUtils.lerp(1.35, 0.6, indoor);
+      hemi.intensity = THREE.MathUtils.lerp(1.35, 0.85, indoor);
       sun.intensity = THREE.MathUtils.lerp(2.6, 1.6, indoor);
-      renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 1.12, indoor);
+      renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 1.22, indoor);
       site.update(time, dt, indoor);
 
       // Sparkles.
@@ -595,7 +743,20 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
       // Camera: over the shoulder; inside the confessional it sits behind the penitent.
       const eye = 1.62 + (avatar.pelvis.position.y - 0.93) * 0.9;
-      if (confessing && confession_ref.current !== 'off') {
+      if (!inWorld) {
+        // Before entering: a slow, quiet glide down the nave toward the altar.
+        const u = (time * 0.018) % 1;
+        const z = THREE.MathUtils.lerp(16, -2, u);
+        camPos.set(Math.sin(time * 0.07) * 2.2, 2.3 + Math.sin(time * 0.11) * 0.35, z);
+        camLook.lerp(introLook, firstFrame ? 1 : 0.05);
+      } else if (asc >= 0) {
+        // Follow the rising light from the aisle, then from the nave looking up.
+        const rise = THREE.MathUtils.clamp((asc - ASC_GATHER) / ASC_RISE, 0, 1);
+        const a = new THREE.Vector3(ascFrom.x - 4.4, 1.9, ascFrom.z + 1.2);
+        const b = new THREE.Vector3(2.4, 1.9, ascFrom.z + 9.5);
+        camPos.lerp(a.lerp(b, THREE.MathUtils.smoothstep(rise, 0.15, 0.7)), 1 - Math.exp(-dt * 1.6));
+        camLook.lerp(orb.position, 1 - Math.exp(-dt * 3));
+      } else if (confessing && confession_ref.current !== 'off') {
         camPos.lerp(site.confessional.cameraEye, 1 - Math.exp(-dt * 3));
         camLook.lerp(site.confessional.cameraLook, 1 - Math.exp(-dt * 3));
       } else {
@@ -623,13 +784,14 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const look = tmpV.set(pos.x + Math.sin(yaw) * 10 * Math.cos(pitch), eye + Math.sin(pitch) * 10, pos.z - Math.cos(yaw) * 10 * Math.cos(pitch));
         camLook.lerp(look, firstFrame ? 1 : 1 - Math.exp(-dt * 10));
       }
+      if (camOverride) { camPos.copy(camOverride[0]); camLook.copy(camOverride[1]); }
       camera.position.copy(camPos);
       camera.lookAt(camLook);
       sun.position.set(pos.x - 40, 45, pos.z + 70);
       sun.target.position.set(pos.x, 0, pos.z);
 
       renderer.render(scene, camera);
-      if (firstFrame) { firstFrame = false; setLoading(false); }
+      if (firstFrame) { firstFrame = false; setLoading(false); onReadyRef.current?.(); }
     };
     const confession_ref = { current: 'off' as 'off' | 'writing' | 'released' };
     const watchConfession = (e: Event) => { confession_ref.current = (e as CustomEvent<'off' | 'writing' | 'released'>).detail; };
@@ -654,14 +816,30 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       host.removeEventListener('touchmove', onTouchMove);
       host.removeEventListener('touchend', onTouchEnd);
       site.dispose();
+      npcs.dispose();
       avatar.dispose();
+      orbTex.dispose();
+      orbMat.dispose();
+      (halo.material as THREE.Material).dispose();
+      moteGeo.dispose();
+      moteMat.dispose();
+      rayTex.dispose();
+      rayMats.forEach(m => m.dispose());
+      rays.children.forEach(c => (c as THREE.Mesh).geometry.dispose());
       sparkGeo.dispose();
       sparkMat.dispose();
       sparkTex.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
-  }, [displayName]);
+  }, []);
+
+  const visitorKey = visitor ? `${visitor.name}|${visitor.outfit}` : '';
+  useEffect(() => {
+    if (visitor && !loading) apiRef.current?.setVisitor(visitor);
+    // Rebuild only when the name or outfit actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitorKey, loading]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('religion:confession', { detail: confession }));
@@ -693,7 +871,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       <div ref={hostRef} className="immersive-avatar-canvas" aria-label="성당과 정원이 이어진 3D 공간. WASD 또는 방향키로 이동하고, 바닥을 클릭하면 그곳으로 걸어갑니다." />
       {loading ? <div className="world-loading" role="status">성당 문을 여는 중…</div> : null}
 
-      {nearFont && fontStep !== 'done' && confession === 'off' ? (
+      {entered && nearFont && fontStep !== 'done' && confession === 'off' ? (
         <div className="holy-water-actions" role="group" aria-label="성수대">
           <span aria-hidden="true">{fontStep === 'water' ? '✧' : '✝'}</span>
           {fontStep === 'water'
@@ -735,12 +913,21 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         </div>
       ) : null}
 
-      <div className="world-action-notice" role="status">{notice}</div>
-      <div className="world-action-bar" role="group" aria-label="동작" hidden={confession !== 'off'}>
+      {rosaryOpen && entered ? (
+        <RosaryPanel
+          onStep={st => apiRef.current?.rosaryStep(`${st.prayer}${st.detail ? ` · ${st.detail}` : ''}`)}
+          onClose={() => { setRosaryOpen(false); if (state.rosary) act('rosary'); }}
+        />
+      ) : null}
+
+      {entered ? <div className="world-action-notice" role="status">{notice}</div> : null}
+      <div className="world-action-bar" role="group" aria-label="동작" hidden={confession !== 'off' || !entered}>
         <button type="button" onClick={() => act('cross')}>✝ 성호 긋기</button>
         <button type="button" aria-pressed={state.praying} onClick={() => act('prayer')}>🙏 {state.praying ? '기도 마치기' : '기도하기'}</button>
         <button type="button" aria-pressed={state.rosary} onClick={() => act('rosary')}>📿 {state.rosary ? '묵주 내려놓기' : '묵주기도'}</button>
-        <button type="button" aria-pressed={state.veil} onClick={() => act('veil')}>{state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
+        {outfit === 'casual' || outfit === 'dress'
+          ? <button type="button" aria-pressed={state.veil} onClick={() => act('veil')}>{state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
+          : null}
         <button type="button" onClick={() => act('bow')}>목례</button>
         <button type="button" onClick={() => act('greet')}>인사</button>
         <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 {state.sitting ? '일어나기' : '앉기'}</button>
@@ -748,16 +935,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         <button type="button" onClick={() => act('confess')}>고해소</button>
         <button type="button" onClick={() => act('mary')}>🌹 성모님께</button>
       </div>
-      <div className="mobile-joystick" role="application" aria-label="이동 조이스틱"
+      <div className="mobile-joystick" hidden={!entered} role="application" aria-label="이동 조이스틱"
         onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); moveJoystick(e); }}
         onPointerMove={e => { if (e.buttons > 0 || e.pressure > 0) moveJoystick(e); }}
         onPointerUp={stopJoystick} onPointerCancel={stopJoystick} onLostPointerCapture={stopJoystick}>
         <span className="mobile-joystick-knob" style={{ transform: `translate(${joystick.x}px, ${joystick.y}px)` }} />
       </div>
-      <div className="camera-touch-hint" aria-hidden="true">드래그로 둘러보기 · 휠/두 손가락으로 거리 조절</div>
-      <div className="world-asset-credit">
-        바닥 대리석 사진 <a href="https://commons.wikimedia.org/wiki/File:Milan_Cathedral,_floor.jpg" target="_blank" rel="noreferrer">Gerda Arendt · CC0</a> · 건축·조각·스테인드글라스는 코드로 만든 창작물입니다.
-      </div>
+      <div className="camera-touch-hint" aria-hidden="true" hidden={!entered}>드래그로 둘러보기 · 휠/두 손가락으로 거리 조절</div>
     </div>
   );
 }

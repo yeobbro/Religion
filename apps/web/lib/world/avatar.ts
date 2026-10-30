@@ -26,7 +26,8 @@ const SHOULDER = V(0.178, 0.052, 0); // chest space, right side (+x)
 const UPPER = 0.285;
 const FORE = 0.245;
 const HEAD_PIVOT = V(0, 0.14, 0);   // neck + head pivot, chest space
-const HEAD_CENTER = V(0, 0.235, 0); // chest space
+const HEAD_SCALE = 1.3;               // big, friendly head
+const HEAD_CENTER = V(0, 0.27, 0);  // chest space
 const PALM_LEN = 0.088;
 const FINGER_SPECS = [
   // [z position on the palm edge, segment lengths, radius]
@@ -63,7 +64,7 @@ type ArmRig = {
 type LegRig = { hip: THREE.Group; knee: THREE.Group; ankle: THREE.Group };
 
 export type Posture = 'stand' | 'sit' | 'kneel';
-export type HandsMode = 'rest' | 'prayer' | 'rosary';
+export type HandsMode = 'rest' | 'prayer' | 'rosary' | 'orans' | 'book';
 export type Gesture = 'cross' | 'dip' | 'bow' | 'greet' | 'veilOn' | 'veilOff' | 'light' | 'amen';
 
 const GESTURE_LENGTH: Record<Gesture, number> = {
@@ -79,7 +80,33 @@ const cloneTarget = (t: ArmTarget): ArmTarget => ({
 const fromTip = (tip: THREE.Vector3, finger: THREE.Vector3, curl = 0) =>
   tip.clone().sub(finger.clone().normalize().multiplyScalar(HAND_LEN * (1 - curl * 0.35)));
 
-export type AvatarOptions = { name: string };
+export type Outfit = 'casual' | 'dress' | 'nun' | 'monk' | 'priest' | 'server' | 'choir';
+export const VISITOR_OUTFITS: { id: Outfit; label: string; hint: string }[] = [
+  { id: 'casual', label: '평상복', hint: '니트와 바지' },
+  { id: 'dress', label: '흰 미사복', hint: '흰 원피스와 미사보' },
+  { id: 'nun', label: '수녀 수도복', hint: '검은 베일과 흰 두건' },
+  { id: 'monk', label: '수사 수도복', hint: '갈색 수도복과 띠' },
+];
+export type AvatarOptions = {
+  name: string;
+  outfit?: Outfit;
+  /** Fewer meshes and mitten hands, for background figures. */
+  lite?: boolean;
+  skin?: string;
+  hair?: string;
+  showName?: boolean;
+  rosary?: boolean;
+};
+type Palette = { top: string; trim: string; bottom: string; shoes: string; hair: string; long: boolean; wideSleeves: boolean };
+const PALETTES: Record<Outfit, Palette> = {
+  casual: { top: '#ecdcc4', trim: '#c7ae8c', bottom: '#47546e', shoes: '#5b3b2b', hair: '#3a281e', long: false, wideSleeves: false },
+  dress: { top: '#fbf8f2', trim: '#eadfc6', bottom: '#f8f4ec', shoes: '#e7ddcf', hair: '#4a3022', long: true, wideSleeves: false },
+  nun: { top: '#1d1e26', trim: '#1d1e26', bottom: '#1d1e26', shoes: '#151515', hair: '#2b211b', long: true, wideSleeves: true },
+  monk: { top: '#6b4a31', trim: '#5a3d28', bottom: '#6b4a31', shoes: '#3b2a1e', hair: '#4a3324', long: true, wideSleeves: true },
+  priest: { top: '#f7f4ec', trim: '#e6dcc8', bottom: '#f7f4ec', shoes: '#151515', hair: '#575049', long: true, wideSleeves: false },
+  server: { top: '#1b1b20', trim: '#1b1b20', bottom: '#1b1b20', shoes: '#151515', hair: '#2e2018', long: true, wideSleeves: true },
+  choir: { top: '#6e1f2a', trim: '#5c1822', bottom: '#6e1f2a', shoes: '#151515', hair: '#3a281e', long: true, wideSleeves: true },
+};
 
 export class Avatar {
   readonly root = new THREE.Group();
@@ -91,6 +118,10 @@ export class Avatar {
   readonly veil: THREE.Mesh;
   readonly rosary = new THREE.Group();
   readonly taper = new THREE.Group();
+  readonly book = new THREE.Group();
+  readonly outfit: Outfit;
+  private robe: THREE.Mesh | null = null;
+  private robeBase: Float32Array | null = null;
   private readonly taperFlame: THREE.Sprite;
   private readonly arms: Record<'left' | 'right', ArmRig>;
   private readonly legs: Record<'left' | 'right', LegRig>;
@@ -117,30 +148,37 @@ export class Avatar {
   private beadPulse = 0;
 
   constructor(opts: AvatarOptions) {
-    const skin = this.mat(new THREE.MeshStandardMaterial({ color: '#e2b598', roughness: 0.58, metalness: 0 }));
-    const skinShade = this.mat(new THREE.MeshStandardMaterial({ color: '#d4a283', roughness: 0.62 }));
-    const hair = this.mat(new THREE.MeshStandardMaterial({ color: '#2a1d17', roughness: 0.55, metalness: 0.05 }));
-    const knit = knitTexture('#d9cdb8');
-    this.disposables.push(knit);
-    const sweater = this.mat(new THREE.MeshStandardMaterial({ color: '#ffffff', map: knit, roughness: 0.92 }));
-    const cuffMat = this.mat(new THREE.MeshStandardMaterial({ color: '#c7b99f', roughness: 0.9 }));
-    const trousers = this.mat(new THREE.MeshStandardMaterial({ color: '#32363c', roughness: 0.86 }));
-    const shoeMat = this.mat(new THREE.MeshStandardMaterial({ color: '#4a3020', roughness: 0.45, metalness: 0.05 }));
-    const white = this.mat(new THREE.MeshStandardMaterial({ color: '#f6f2ec', roughness: 0.25 }));
-    const iris = this.mat(new THREE.MeshStandardMaterial({ color: '#4b3326', roughness: 0.3 }));
-    const pupil = this.mat(new THREE.MeshStandardMaterial({ color: '#0c0b0b', roughness: 0.2 }));
-    const lip = this.mat(new THREE.MeshStandardMaterial({ color: '#b56f68', roughness: 0.48 }));
-    const brow = this.mat(new THREE.MeshStandardMaterial({ color: '#2a1d17', roughness: 0.8 }));
+    const outfit = opts.outfit ?? 'casual';
+    const lite = opts.lite ?? false;
+    this.outfit = outfit;
+    const seg = lite ? 12 : 20;
+    const P = PALETTES[outfit];
+    const skin = this.mat(new THREE.MeshStandardMaterial({ color: opts.skin ?? '#f0c6a8', roughness: 0.55, metalness: 0 }));
+    const skinShade = this.mat(new THREE.MeshStandardMaterial({ color: '#e3ad8c', roughness: 0.6 }));
+    const hair = this.mat(new THREE.MeshStandardMaterial({ color: opts.hair ?? P.hair, roughness: 0.5, metalness: 0.05 }));
+    let topMap: THREE.Texture | undefined;
+    if (outfit === 'casual' && !lite) { topMap = knitTexture('#ffffff'); this.disposables.push(topMap); }
+    const top = this.mat(new THREE.MeshStandardMaterial({ color: P.top, map: topMap, roughness: 0.9 }));
+    const trim = this.mat(new THREE.MeshStandardMaterial({ color: P.trim, roughness: 0.85 }));
+    const bottom = this.mat(new THREE.MeshStandardMaterial({ color: P.bottom, roughness: 0.86, side: THREE.DoubleSide }));
+    const shoeMat = this.mat(new THREE.MeshStandardMaterial({ color: P.shoes, roughness: 0.45, metalness: 0.05 }));
+    const white = this.mat(new THREE.MeshStandardMaterial({ color: '#fbf8f3', roughness: 0.25 }));
+    const iris = this.mat(new THREE.MeshStandardMaterial({ color: '#3b2418', roughness: 0.25 }));
+    const pupil = this.mat(new THREE.MeshStandardMaterial({ color: '#0b0a0a', roughness: 0.2 }));
+    const lip = this.mat(new THREE.MeshStandardMaterial({ color: '#d0807a', roughness: 0.45 }));
+    const brow = this.mat(new THREE.MeshStandardMaterial({ color: '#3a2a20', roughness: 0.8 }));
+    const blush = this.mat(new THREE.MeshBasicMaterial({ color: '#ff9e9e', transparent: true, opacity: 0.32, depthWrite: false }));
+    const gold = this.mat(new THREE.MeshStandardMaterial({ color: '#d4ad5a', roughness: 0.3, metalness: 0.8 }));
 
     const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0, shadow = true) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
       m.castShadow = shadow;
-      m.receiveShadow = true;
+      m.receiveShadow = !lite;
       parent.add(m);
       return m;
     };
-    const lathe = (pts: [number, number][], seg = 28) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+    const lathe = (pts: [number, number][], n = 28) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), lite ? 14 : n);
 
     // Hierarchy.
     this.root.add(this.pelvis);
@@ -150,78 +188,178 @@ export class Avatar {
     this.spine.add(this.chest);
     this.chest.position.y = CHEST_Y;
     this.chest.add(this.neck);
-    this.neck.position.y = 0.1;
+    this.neck.position.y = 0.09;
     this.neck.add(this.head);
-    this.head.position.y = HEAD_PIVOT.y - 0.1;
+    this.head.position.y = HEAD_PIVOT.y - 0.09;
+    this.head.scale.setScalar(HEAD_SCALE);
 
-    // Hips and seat, in trousers.
-    const hips = add(this.pelvis, lathe([[0, -0.1], [0.12, -0.098], [0.14, -0.06], [0.143, 0.0], [0.139, 0.07], [0.136, 0.11]]), trousers);
+    // Hips, torso, collar, neck.
+    const hips = add(this.pelvis, lathe([[0, -0.1], [0.12, -0.098], [0.14, -0.06], [0.143, 0.0], [0.139, 0.07], [0.136, 0.11]]), P.long ? top : bottom);
     hips.scale.z = 0.72;
-    // Sweater torso from the waist to the shoulders.
-    const torso = add(this.spine, lathe([[0.0, -0.035], [0.139, -0.035], [0.141, 0.0], [0.147, 0.09], [0.16, 0.18], [0.174, 0.26], [0.186, 0.31], [0.183, 0.345], [0.155, 0.385], [0.1, 0.41], [0.058, 0.425], [0.0, 0.43]], 32), sweater);
+    const torso = add(this.spine, lathe([[0.0, -0.035], [0.139, -0.035], [0.141, 0.0], [0.147, 0.09], [0.158, 0.18], [0.168, 0.26], [0.178, 0.31], [0.176, 0.345], [0.15, 0.385], [0.1, 0.41], [0.058, 0.425], [0.0, 0.43]], 32), top);
     torso.scale.z = 0.7;
-    const collar = add(this.chest, new THREE.TorusGeometry(0.058, 0.014, 8, 28), cuffMat, 0, 0.115, 0.004);
-    collar.rotation.x = Math.PI / 2;
-    collar.scale.y = 0.82;
-    add(this.neck, new THREE.CylinderGeometry(0.043, 0.047, 0.12, 18), skin, 0, 0.02, 0.006);
+    add(this.neck, new THREE.CylinderGeometry(0.04, 0.045, 0.1, seg), skin, 0, 0.02, 0.006);
+    if (outfit === 'casual' || outfit === 'dress') {
+      const collar = add(this.chest, new THREE.TorusGeometry(0.058, 0.013, 8, 28), trim, 0, 0.115, 0.004);
+      collar.rotation.x = Math.PI / 2;
+      collar.scale.y = 0.82;
+    }
 
-    // Head: cranium, jaw, face, ears and hair.
-    // One sculpted surface: egg-shaped cranium narrowing to the jaw and a soft chin.
-    const headGeo = new THREE.SphereGeometry(0.1, 48, 36);
+    // Long garments: a skirt hanging from the waist that follows the legs when sitting or kneeling.
+    if (P.long) {
+      const rows = 10, cols = lite ? 18 : 36;
+      const pos: number[] = [], idx: number[] = [];
+      for (let r = 0; r <= rows; r += 1) {
+        const t = r / rows;
+        const rad = 0.142 + t * t * 0.1 + t * 0.03;
+        for (let c = 0; c <= cols; c += 1) {
+          const a = (c / cols) * Math.PI * 2;
+          const fold = 1 + Math.sin(a * 9) * 0.035 * t;
+          pos.push(Math.sin(a) * rad * fold, -0.04 - t * (PELVIS_Y - 0.1), Math.cos(a) * rad * 0.82 * fold);
+        }
+      }
+      for (let r = 0; r < rows; r += 1) for (let c = 0; c < cols; c += 1) {
+        const a = r * (cols + 1) + c, b = a + 1, d = a + cols + 1, e = d + 1;
+        idx.push(a, d, b, b, d, e);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      this.robeBase = Float32Array.from(pos);
+      this.robe = add(this.pelvis, g, bottom);
+      this.robe.frustumCulled = false;
+    }
+
+    // Garment extras by outfit.
+    if (outfit === 'nun') {
+      // White guimpe over the chest and a crucifix on a cord.
+      const bib = add(this.chest, new THREE.SphereGeometry(0.13, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), white, 0, 0.04, 0.0);
+      bib.scale.set(1.18, 0.8, 0.86);
+      add(this.chest, new THREE.BoxGeometry(0.012, 0.06, 0.006), gold, 0, -0.07, -0.128, false);
+      add(this.chest, new THREE.BoxGeometry(0.036, 0.011, 0.006), gold, 0, -0.058, -0.128, false);
+    }
+    if (outfit === 'monk') {
+      // Hood resting on the shoulders, and a white cord with three knots.
+      const hood = add(this.chest, new THREE.SphereGeometry(0.12, 20, 12, Math.PI * 0.15, Math.PI * 0.7 * 2, Math.PI * 0.25, Math.PI * 0.5), top, 0, 0.1, 0.07);
+      hood.rotation.y = Math.PI;
+      hood.scale.set(1.25, 0.8, 1.0);
+      const cord = add(this.spine, new THREE.TorusGeometry(0.146, 0.008, 6, 36), white, 0, 0.0, 0);
+      cord.rotation.x = Math.PI / 2;
+      cord.scale.y = 0.75;
+      for (let k = 0; k < 3; k += 1) add(this.spine, new THREE.SphereGeometry(0.012, 8, 6), white, 0.07, -0.08 - k * 0.12, -0.11, false);
+      add(this.spine, new THREE.CylinderGeometry(0.005, 0.005, 0.38, 6), white, 0.07, -0.2, -0.11, false);
+    }
+    if (outfit === 'priest') {
+      // Green chasuble over the white alb: front and back panels with a gold cross and orphrey.
+      const chas = this.mat(new THREE.MeshStandardMaterial({ color: '#2f6a46', roughness: 0.7, side: THREE.DoubleSide }));
+      for (const z of [-1, 1]) {
+        const panel = add(this.spine, new THREE.CylinderGeometry(0.215, 0.32, 0.78, 20, 1, true, z < 0 ? Math.PI * 0.62 : -Math.PI * 0.38, Math.PI * 0.76), chas, 0, 0.04, 0);
+        panel.scale.z = 0.68;
+      }
+      const goldSide = this.mat(new THREE.MeshStandardMaterial({ color: '#d4ad5a', roughness: 0.35, metalness: 0.75, side: THREE.DoubleSide }));
+      const orphrey = add(this.spine, new THREE.CylinderGeometry(0.219, 0.324, 0.78, 3, 1, true, Math.PI - 0.13, 0.26), goldSide, 0, 0.04, 0, false);
+      orphrey.scale.z = 0.69;
+    }
+    if (outfit === 'server') {
+      // White surplice over the black cassock.
+      const surplice = this.mat(new THREE.MeshStandardMaterial({ color: '#f7f4ec', roughness: 0.8, side: THREE.DoubleSide }));
+      const sp = add(this.spine, new THREE.CylinderGeometry(0.19, 0.28, 0.6, 24, 1, true), surplice, 0, 0.06, 0);
+      sp.scale.z = 0.75;
+    }
+    if (outfit === 'choir') {
+      const ruff = add(this.chest, new THREE.TorusGeometry(0.06, 0.024, 8, 24), white, 0, 0.11, 0.0);
+      ruff.rotation.x = Math.PI / 2;
+    }
+
+    // Head (scaled up for a gentle, friendly look): rounded face, big eyes, small nose and mouth.
+    const headGeo = new THREE.SphereGeometry(0.1, lite ? 20 : 44, lite ? 16 : 32);
     const hp = headGeo.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < hp.count; i += 1) {
       let x = hp.getX(i), y = hp.getY(i), z = hp.getZ(i);
-      const lower = Math.max(0, -y / 0.1); // 0 at the eyes, 1 at the chin
-      x *= 0.84 * (1 - 0.34 * Math.pow(lower, 1.6));
-      z *= 0.96 * (1 - 0.18 * Math.pow(lower, 1.4));
-      if (z < 0) z *= 0.92 + 0.08 * (1 - lower); // flatter face plane
-      if (y < 0) y *= 1.18;
-      z -= lower * lower * 0.012; // chin forward
-      hp.setXYZ(i, x, y * 1.05, z);
+      const lower = Math.max(0, -y / 0.1);
+      x *= 0.9 * (1 - 0.22 * Math.pow(lower, 1.8));
+      z *= 0.95 * (1 - 0.1 * Math.pow(lower, 1.5));
+      if (z < 0) z *= 0.94;
+      if (y < 0) y *= 1.02;
+      hp.setXYZ(i, x, y, z);
     }
     headGeo.computeVertexNormals();
     add(this.head, headGeo, skin, 0, 0.1, 0.004);
     for (const s of [-1, 1]) {
-      const ear = add(this.head, new THREE.SphereGeometry(0.021, 14, 10), skinShade, s * 0.083, 0.094, 0.012);
+      const ear = add(this.head, new THREE.SphereGeometry(0.02, 12, 10), skinShade, s * 0.088, 0.1, 0.012);
       ear.scale.set(0.42, 1.0, 0.72);
-      // Eye: white, iris, pupil, catch light and a blinking lid.
-      const eyeY = 0.108, eyeZ = -0.082, eyeX = s * 0.031;
-      const eye = add(this.head, new THREE.SphereGeometry(0.0128, 18, 14), white, eyeX, eyeY, eyeZ, false);
-      eye.scale.set(1.1, 0.78, 0.7);
-      const irisM = add(this.head, new THREE.CircleGeometry(0.0074, 20), iris, eyeX, eyeY, eyeZ - 0.0092, false);
+      const eyeY = 0.098, eyeZ = -0.083, eyeX = s * 0.036;
+      const eye = add(this.head, new THREE.SphereGeometry(0.019, lite ? 10 : 18, lite ? 8 : 14), white, eyeX, eyeY, eyeZ, false);
+      eye.scale.set(0.95, 1.12, 0.6);
+      const irisM = add(this.head, new THREE.CircleGeometry(0.0128, 24), iris, eyeX, eyeY - 0.001, eyeZ - 0.0118, false);
       irisM.rotation.y = Math.PI;
-      const pupilM = add(this.head, new THREE.CircleGeometry(0.0036, 16), pupil, eyeX, eyeY, eyeZ - 0.0095, false);
+      irisM.scale.y = 1.12;
+      const pupilM = add(this.head, new THREE.CircleGeometry(0.0064, 18), pupil, eyeX, eyeY - 0.001, eyeZ - 0.0122, false);
       pupilM.rotation.y = Math.PI;
-      const glint = add(this.head, new THREE.CircleGeometry(0.0016, 8), white, eyeX + 0.0025, eyeY + 0.0028, eyeZ - 0.0098, false);
-      glint.rotation.y = Math.PI;
-      const lid = add(this.head, new THREE.SphereGeometry(0.0142, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), skin, eyeX, eyeY + 0.0005, eyeZ + 0.0005, false);
-      lid.scale.set(1.12, 1.0, 0.8);
+      if (!lite) {
+        const glint = add(this.head, new THREE.CircleGeometry(0.0034, 10), white, eyeX + 0.004, eyeY + 0.006, eyeZ - 0.0126, false);
+        glint.rotation.y = Math.PI;
+        const glint2 = add(this.head, new THREE.CircleGeometry(0.0017, 8), white, eyeX - 0.004, eyeY - 0.005, eyeZ - 0.0126, false);
+        glint2.rotation.y = Math.PI;
+        const lash = add(this.head, new THREE.TorusGeometry(0.0172, 0.0021, 4, 18, Math.PI), brow, eyeX, eyeY + 0.003, eyeZ - 0.004, false);
+        lash.scale.set(1.05, 1.12, 1);
+        const cheek = add(this.head, new THREE.CircleGeometry(0.014, 16), blush, s * 0.054, 0.068, -0.067, false);
+        cheek.rotation.y = Math.PI + s * 0.62;
+        cheek.scale.y = 0.6;
+      }
+      const lid = add(this.head, new THREE.SphereGeometry(0.0205, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), skin, eyeX, eyeY + 0.001, eyeZ + 0.0005, false);
+      lid.scale.set(1.0, 1.15, 0.66);
       this.eyelids.push(lid);
-      const lash = add(this.head, new THREE.TorusGeometry(0.0118, 0.0013, 4, 16, Math.PI), brow, eyeX, eyeY + 0.0012, eyeZ - 0.003, false);
-      lash.scale.set(1.1, 0.7, 1);
-      const browM = add(this.head, new THREE.CapsuleGeometry(0.0024, 0.024, 4, 8), brow, s * 0.033, 0.129, -0.086, false);
-      browM.rotation.z = Math.PI / 2 - s * 0.1;
+      const browM = add(this.head, new THREE.CapsuleGeometry(0.0022, 0.02, 4, 8), brow, s * 0.036, 0.132, -0.084, false);
+      browM.rotation.z = Math.PI / 2 - s * 0.14;
     }
-    const noseBridge = add(this.head, new THREE.CapsuleGeometry(0.0062, 0.028, 6, 10), skin, 0, 0.09, -0.091, false);
-    noseBridge.rotation.x = -0.32;
-    const noseTip = add(this.head, new THREE.SphereGeometry(0.0095, 14, 10), skin, 0, 0.075, -0.098, false);
-    noseTip.scale.set(1.1, 0.85, 0.95);
-    for (const s of [-1, 1]) add(this.head, new THREE.SphereGeometry(0.0058, 10, 8), skinShade, s * 0.0085, 0.072, -0.093, false);
-    const upperLip = add(this.head, new THREE.CapsuleGeometry(0.0052, 0.019, 4, 10), lip, 0, 0.051, -0.087, false);
-    upperLip.rotation.z = Math.PI / 2;
-    upperLip.scale.set(1, 1, 0.8);
-    const lowerLip = add(this.head, new THREE.CapsuleGeometry(0.0056, 0.016, 4, 10), lip, 0, 0.0425, -0.0845, false);
-    lowerLip.rotation.z = Math.PI / 2;
-    lowerLip.scale.set(1, 1, 0.85);
-    // Hair: a shell open at the face, a fringe cap and a low bun.
-    const frontGap = 1.15;
-    const shell = add(this.head, new THREE.SphereGeometry(0.113, 36, 24, Math.PI * 1.5 + frontGap / 2, Math.PI * 2 - frontGap, 0, Math.PI * 0.74), hair, 0, 0.098, 0.008);
-    shell.scale.set(0.9, 1.08, 1.03);
-    const fringe = add(this.head, new THREE.SphereGeometry(0.111, 32, 12, 0, Math.PI * 2, 0, Math.PI * 0.27), hair, 0, 0.1, 0.0);
-    fringe.scale.set(0.89, 1.07, 1.0);
-    add(this.head, new THREE.SphereGeometry(0.042, 18, 14), hair, 0, 0.072, 0.105).scale.set(1.1, 0.9, 0.9);
+    const noseTip = add(this.head, new THREE.SphereGeometry(0.0075, 12, 8), skinShade, 0, 0.07, -0.092, false);
+    noseTip.scale.set(1.2, 0.8, 0.9);
+    const smile = add(this.head, new THREE.TorusGeometry(0.012, 0.0032, 6, 16, Math.PI), lip, 0, 0.052, -0.08, false);
+    smile.rotation.z = Math.PI;
+    smile.rotation.x = -0.2;
 
-    // Lace mantilla (chapel veil): open at the face, draping to the shoulders.
+    // Hair or head covering.
+    const longHair = outfit === 'casual' || outfit === 'dress';
+    if (outfit === 'nun') {
+      // White coif framing the face and a long black veil.
+      const linen = this.mat(new THREE.MeshStandardMaterial({ color: '#fbf8f3', roughness: 0.7, emissive: '#3a3833', side: THREE.DoubleSide }));
+      const coif = add(this.head, new THREE.SphereGeometry(0.108, 32, 20, Math.PI * 1.5 + 0.62, Math.PI * 2 - 1.24, 0, Math.PI * 0.8), linen, 0, 0.1, 0.006);
+      coif.scale.set(0.95, 1.02, 1.0);
+      // White band across the forehead under the veil.
+      const band = add(this.head, new THREE.SphereGeometry(0.1075, 32, 10, 0, Math.PI * 2, 0, Math.PI * 0.34), linen, 0, 0.1, 0.003);
+      band.scale.set(0.95, 1.03, 1.0);
+      const veilGeo = new THREE.SphereGeometry(0.122, 32, 20, Math.PI * 1.5 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * 0.9);
+      const vp = veilGeo.attributes.position as THREE.BufferAttribute;
+      const vuv = veilGeo.attributes.uv as THREE.BufferAttribute;
+      for (let i = 0; i < vp.count; i += 1) {
+        const v = 1 - vuv.getY(i);
+        const o = 1 + smooth((v - 0.45) / 0.55) * 0.35;
+        vp.setXYZ(i, vp.getX(i) * o, vp.getY(i) - smooth((v - 0.4) / 0.6) * 0.32, vp.getZ(i) * o + (v > 0.5 ? (v - 0.5) * 0.12 : 0));
+      }
+      veilGeo.computeVertexNormals();
+      add(this.head, veilGeo, this.mat(new THREE.MeshStandardMaterial({ color: '#16171d', roughness: 0.8, side: THREE.DoubleSide })), 0, 0.108, 0.01);
+    } else if (longHair) {
+      const frontGap = 1.2;
+      const shell = add(this.head, new THREE.SphereGeometry(0.11, 36, 24, Math.PI * 1.5 + frontGap / 2, Math.PI * 2 - frontGap, 0, Math.PI * 0.78), hair, 0, 0.1, 0.01);
+      shell.scale.set(0.97, 1.06, 1.05);
+      const fringe = add(this.head, new THREE.SphereGeometry(0.108, 32, 12, 0, Math.PI * 2, 0, Math.PI * 0.3), hair, 0, 0.104, -0.002);
+      fringe.scale.set(0.95, 1.05, 1.02);
+      for (const s of [-1, 1]) {
+        const side = add(this.head, new THREE.CapsuleGeometry(0.03, 0.08, 6, 10), hair, s * 0.083, 0.05, -0.02);
+        side.rotation.z = s * 0.12;
+        side.scale.z = 0.7;
+      }
+      add(this.head, new THREE.SphereGeometry(0.045, 18, 14), hair, 0, 0.09, 0.105).scale.set(1.1, 0.95, 0.9);
+    } else {
+      const cap = add(this.head, new THREE.SphereGeometry(0.106, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, 0, 0.104, 0.008);
+      cap.scale.set(0.95, 1.04, 1.04);
+      const back = add(this.head, new THREE.SphereGeometry(0.104, 24, 12, Math.PI * 0.2 - Math.PI / 2, Math.PI * 1.0, Math.PI * 0.45, Math.PI * 0.3), hair, 0, 0.1, 0.01);
+      back.rotation.y = Math.PI;
+    }
+
+    // Lace chapel veil (미사보): open at the face, draping to the shoulders.
     const lace = laceTexture();
     lace.repeat.set(3.2, 1);
     this.disposables.push(lace);
@@ -229,7 +367,7 @@ export class Avatar {
     const pos = veilGeo.attributes.position as THREE.BufferAttribute;
     const uv = veilGeo.attributes.uv as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i += 1) {
-      const v = 1 - uv.getY(i); // 0 at the crown, 1 at the hem
+      const v = 1 - uv.getY(i);
       const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
       const out = 1 + smooth((v - 0.5) / 0.5) * 0.3;
       const drop = smooth((v - 0.45) / 0.55) * 0.2;
@@ -241,37 +379,39 @@ export class Avatar {
       color: '#fbf7ef', map: lace, alphaMap: lace, transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, roughness: 0.8, opacity: 0,
     })));
     this.veil.position.set(0, 0.104, 0.006);
-    this.veil.scale.set(0.95, 1.05, 1.02);
+    this.veil.scale.set(0.98, 1.05, 1.04);
     this.veil.visible = false;
     this.veil.castShadow = false;
     this.head.add(this.veil);
+    if (outfit === 'dress') this.veilOn = true;
 
     // Arms and hands.
     const makeArm = (s: Side): ArmRig => {
       const shoulder = new THREE.Group();
       shoulder.position.set(SHOULDER.x * s, SHOULDER.y, SHOULDER.z);
       this.chest.add(shoulder);
-      add(shoulder, new THREE.SphereGeometry(0.044, 20, 16), sweater);
-      add(shoulder, new THREE.CylinderGeometry(0.046, 0.039, UPPER, 18), sweater, 0, -UPPER / 2, 0);
+      const sleeve = outfit === 'priest' || outfit === 'server' ? this.mat(new THREE.MeshStandardMaterial({ color: '#f7f4ec', roughness: 0.8 })) : top;
+      add(shoulder, new THREE.SphereGeometry(0.044, seg, 14), sleeve);
+      add(shoulder, new THREE.CylinderGeometry(0.046, 0.039, UPPER, seg), sleeve, 0, -UPPER / 2, 0);
       const elbow = new THREE.Group();
       elbow.position.y = -UPPER;
       shoulder.add(elbow);
-      add(elbow, new THREE.SphereGeometry(0.039, 18, 14), sweater);
-      add(elbow, new THREE.CylinderGeometry(0.039, 0.033, FORE - 0.035, 18), sweater, 0, -(FORE - 0.035) / 2, 0);
-      const cuff = add(elbow, new THREE.TorusGeometry(0.031, 0.0045, 6, 22), cuffMat, 0, -FORE + 0.037, 0);
-      cuff.rotation.x = Math.PI / 2;
-      add(elbow, new THREE.CylinderGeometry(0.025, 0.028, 0.04, 16), skin, 0, -FORE + 0.02, 0);
-      add(elbow, new THREE.SphereGeometry(0.026, 16, 12), skin, 0, -FORE, 0);
+      add(elbow, new THREE.SphereGeometry(0.039, seg, 12), sleeve);
+      const wide = P.wideSleeves ? 0.062 : 0.033;
+      add(elbow, new THREE.CylinderGeometry(0.039, wide, FORE - 0.035, seg, 1, P.wideSleeves), P.wideSleeves ? this.mat(new THREE.MeshStandardMaterial({ color: (sleeve as THREE.MeshStandardMaterial).color, roughness: 0.85, side: THREE.DoubleSide })) : sleeve, 0, -(FORE - 0.035) / 2, 0);
+      if (!P.wideSleeves) {
+        const cuff = add(elbow, new THREE.TorusGeometry(0.031, 0.0045, 6, 22), trim, 0, -FORE + 0.037, 0);
+        cuff.rotation.x = Math.PI / 2;
+      }
+      add(elbow, new THREE.CylinderGeometry(0.024, 0.027, 0.06, 14), skin, 0, -FORE + 0.025, 0);
+      add(elbow, new THREE.SphereGeometry(0.025, 14, 10), skin, 0, -FORE, 0);
       const hand = new THREE.Group();
       hand.position.y = -FORE;
       elbow.add(hand);
-      // Palm: flat on the palm side so two hands can meet without a gap.
-      add(hand, new RoundedBoxGeometry(0.027, PALM_LEN, 0.078, 3, 0.011), skin, 0, -PALM_LEN / 2 - 0.002, 0);
-      const knuckles = add(hand, new THREE.CapsuleGeometry(0.009, 0.06, 4, 10), skinShade, s * 0.004, -PALM_LEN + 0.004, 0);
-      knuckles.rotation.x = Math.PI / 2;
-      knuckles.visible = true;
+      add(hand, new RoundedBoxGeometry(0.027, PALM_LEN, 0.078, lite ? 1 : 3, 0.011), skin, 0, -PALM_LEN / 2 - 0.002, 0);
       const fingers: THREE.Group[][] = [];
-      for (const spec of FINGER_SPECS) {
+      const fingerSpecs = lite ? [{ z: -0.0, seg: [0.05, 0.035, 0.0], r: 0.028 }] : FINGER_SPECS;
+      for (const spec of fingerSpecs) {
         const chain: THREE.Group[] = [];
         let parent: THREE.Object3D = hand;
         let y = -PALM_LEN;
@@ -279,11 +419,14 @@ export class Avatar {
           const j = new THREE.Group();
           j.position.set(k === 0 ? -s * 0.0055 : 0, y, k === 0 ? spec.z : 0);
           parent.add(j);
-          const r = spec.r * (1 - k * 0.08);
-          add(j, new THREE.CapsuleGeometry(r, Math.max(0.001, len - r), 4, 10), k === 2 ? skin : skin, 0, -len / 2, 0);
-          if (k === 2) {
-            const nail = add(j, new THREE.SphereGeometry(r * 0.85, 10, 6), white, s * r * 0.55, -len * 0.62, 0, false);
-            nail.scale.set(0.35, 1.1, 0.85);
+          if (len > 0) {
+            const r = spec.r * (1 - k * 0.08);
+            const m = add(j, lite ? new THREE.BoxGeometry(0.02, len, 0.072) : new THREE.CapsuleGeometry(r, Math.max(0.001, len - r), 4, 10), skin, 0, -len / 2, 0);
+            if (!lite && k === 2) {
+              const nail = add(j, new THREE.SphereGeometry(r * 0.85, 10, 6), white, s * r * 0.55, -len * 0.62, 0, false);
+              nail.scale.set(0.35, 1.1, 0.85);
+            }
+            void m;
           }
           chain.push(j);
           parent = j;
@@ -299,7 +442,7 @@ export class Avatar {
         else j.position.y = -[0.036, 0.03][k - 1];
         parent.add(j);
         const r = 0.0108 * (1 - k * 0.08);
-        add(j, new THREE.CapsuleGeometry(r, len - r, 4, 10), skin, 0, -len / 2, 0);
+        if (!lite || k < 2) add(j, new THREE.CapsuleGeometry(r, len - r, 4, lite ? 6 : 10), skin, 0, -len / 2, 0);
         thumb.push(j);
         parent = j;
       });
@@ -315,38 +458,46 @@ export class Avatar {
       const hip = new THREE.Group();
       hip.position.set(0.092 * s, -0.03, 0);
       this.pelvis.add(hip);
-      add(hip, new THREE.SphereGeometry(0.076, 20, 16), trousers);
-      add(hip, new THREE.CylinderGeometry(0.072, 0.053, 0.43, 20), trousers, 0, -0.215, 0);
+      add(hip, new THREE.SphereGeometry(0.076, seg, 14), bottom);
+      add(hip, new THREE.CylinderGeometry(0.072, 0.053, 0.43, seg), bottom, 0, -0.215, 0);
       const knee = new THREE.Group();
       knee.position.y = -0.43;
       hip.add(knee);
-      add(knee, new THREE.SphereGeometry(0.054, 18, 14), trousers);
-      add(knee, new THREE.CylinderGeometry(0.052, 0.042, 0.4, 18), trousers, 0, -0.2, 0);
+      add(knee, new THREE.SphereGeometry(0.054, seg, 12), bottom);
+      add(knee, new THREE.CylinderGeometry(0.052, 0.042, 0.4, seg), P.long ? this.mat(new THREE.MeshStandardMaterial({ color: '#2a2422', roughness: 0.9 })) : bottom, 0, -0.2, 0);
       const ankle = new THREE.Group();
       ankle.position.y = -0.41;
       knee.add(ankle);
-      add(ankle, new RoundedBoxGeometry(0.088, 0.064, 0.245, 3, 0.028), shoeMat, 0, -0.03, -0.058);
-      add(ankle, new THREE.BoxGeometry(0.09, 0.012, 0.25), this.mat(new THREE.MeshStandardMaterial({ color: '#211812', roughness: 0.7 })), 0, -0.059, -0.058);
+      add(ankle, new RoundedBoxGeometry(0.088, 0.064, 0.245, lite ? 1 : 3, 0.028), shoeMat, 0, -0.03, -0.058);
       return { hip, knee, ankle };
     };
     this.legs = { left: makeLeg(-1), right: makeLeg(1) };
 
     // Rosary held between the hands (decades of ten small beads, five large beads, medal, crucifix).
-    const bead = this.mat(new THREE.MeshStandardMaterial({ color: '#e8dccb', roughness: 0.25, metalness: 0.1 }));
-    const gold = this.mat(new THREE.MeshStandardMaterial({ color: '#c8a35a', roughness: 0.3, metalness: 0.75 }));
-    const loop = 55;
-    for (let i = 0; i < loop; i += 1) {
-      const a = Math.PI / 2 + (i / loop) * Math.PI * 2;
-      const large = i % 11 === 0;
-      add(this.rosary, new THREE.SphereGeometry(large ? 0.0085 : 0.006, 10, 8), large ? gold : bead, Math.cos(a) * 0.05, Math.sin(a) * 0.085 - 0.085, 0, false);
+    if (!lite || opts.rosary) {
+      const bead = this.mat(new THREE.MeshStandardMaterial({ color: '#e8dccb', roughness: 0.25, metalness: 0.1 }));
+      const loop = 55;
+      for (let i = 0; i < loop; i += 1) {
+        const a = Math.PI / 2 + (i / loop) * Math.PI * 2;
+        const large = i % 11 === 0;
+        add(this.rosary, new THREE.SphereGeometry(large ? 0.0085 : 0.006, 8, 6), large ? gold : bead, Math.cos(a) * 0.05, Math.sin(a) * 0.085 - 0.085, 0, false);
+      }
+      for (let i = 0; i < 4; i += 1) add(this.rosary, new THREE.SphereGeometry(i === 0 ? 0.0085 : 0.006, 8, 6), i === 0 ? gold : bead, 0, -0.18 - i * 0.017, 0, false);
+      add(this.rosary, new THREE.BoxGeometry(0.007, 0.05, 0.004), gold, 0, -0.27, 0, false);
+      add(this.rosary, new THREE.BoxGeometry(0.03, 0.007, 0.004), gold, 0, -0.259, 0, false);
     }
-    for (let i = 0; i < 4; i += 1) add(this.rosary, new THREE.SphereGeometry(i === 0 ? 0.0085 : 0.006, 10, 8), i === 0 ? gold : bead, 0, -0.18 - i * 0.017, 0, false);
-    add(this.rosary, new THREE.SphereGeometry(0.011, 12, 8), gold, 0, -0.17, 0, false).scale.set(0.8, 1.1, 0.4);
-    add(this.rosary, new THREE.BoxGeometry(0.007, 0.05, 0.004), gold, 0, -0.27, 0, false);
-    add(this.rosary, new THREE.BoxGeometry(0.03, 0.007, 0.004), gold, 0, -0.259, 0, false);
     this.rosary.position.set(0, -0.2, -0.235);
     this.rosary.visible = false;
     this.chest.add(this.rosary);
+
+    // Hymn book for choir members and readers.
+    const bookMat = this.mat(new THREE.MeshStandardMaterial({ color: '#5a1a22', roughness: 0.7 }));
+    add(this.book, new THREE.BoxGeometry(0.2, 0.026, 0.15), bookMat, 0, 0, 0, false);
+    add(this.book, new THREE.BoxGeometry(0.19, 0.02, 0.14), white, 0, 0.014, 0, false);
+    this.book.position.set(0, -0.08, -0.3);
+    this.book.rotation.x = -0.9;
+    this.book.visible = false;
+    this.chest.add(this.book);
 
     // Taper for lighting votive candles; it lives in the right fist.
     add(this.taper, new THREE.CylinderGeometry(0.0055, 0.0055, 0.34, 10), this.mat(new THREE.MeshStandardMaterial({ color: '#f1e6cc', roughness: 0.5 })), 0, 0, 0, false).rotation.x = Math.PI / 2;
@@ -365,7 +516,8 @@ export class Avatar {
     this.disposables.push(tex);
     this.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
     this.label.scale.set(0.5, 0.095, 1);
-    this.label.position.set(0, 1.98, 0);
+    this.label.position.set(0, 2.08, 0);
+    this.label.visible = opts.showName ?? true;
     this.root.add(this.label);
   }
 
@@ -395,6 +547,7 @@ export class Avatar {
   setHands(h: HandsMode) {
     this.hands = h;
     this.rosary.visible = h === 'rosary';
+    this.book.visible = h === 'book';
   }
 
   /** Begin a timed gesture. `cue` fires at the gesture's key moment (touch, ignition, veil drop). */
@@ -452,6 +605,8 @@ export class Avatar {
     let headTurn = 0;
     if (this.hands === 'prayer') { headPitch -= 0.22; spineBend -= 0.03; }
     if (this.hands === 'rosary') headPitch -= 0.3;
+    if (this.hands === 'book') headPitch -= 0.25;
+    if (this.hands === 'orans') headPitch += 0.05;
 
     // Arm targets for the base hand mode.
     const breath = Math.sin(this.time * 1.3) * 0.006;
@@ -481,8 +636,25 @@ export class Avatar {
       thumb: 0.55 + (s > 0 ? this.beadPulse * 0.3 : 0),
       spread: 0.02,
     });
-    let left = this.hands === 'prayer' ? prayerHands(-1) : this.hands === 'rosary' ? rosaryHands(-1) : rest(-1);
-    let right = this.hands === 'prayer' ? prayerHands(1) : this.hands === 'rosary' ? rosaryHands(1) : rest(1);
+    const orans = (s: Side): ArmTarget => ({
+      wrist: V(0.33 * s, 0.02 + breath, -0.2), finger: V(0.28 * s, 1, -0.15), palm: V(0.1 * s, 0.15, -1),
+      pole: V(1 * s, -1, 0.3), curl: 0.12, thumb: 0.1, spread: 0.06,
+    });
+    const bookHands = (s: Side): ArmTarget => ({
+      wrist: V(0.1 * s, -0.17 + breath, -0.24), finger: V(-0.25 * s, 0.35, -1), palm: V(0, 1, 0.3),
+      pole: V(0.8 * s, -1, 0.3), curl: 0.35, thumb: 0.2, spread: 0.02,
+    });
+    const base = (s: Side) => {
+      switch (this.hands) {
+        case 'prayer': return prayerHands(s);
+        case 'rosary': return rosaryHands(s);
+        case 'orans': return orans(s);
+        case 'book': return bookHands(s);
+        default: return rest(s);
+      }
+    };
+    let left = base(-1);
+    let right = base(1);
     this.beadPulse = Math.max(0, this.beadPulse - dt * 2.5);
 
     // Timed gestures override the base targets.
@@ -529,6 +701,8 @@ export class Avatar {
     this.solveArm(this.arms.left);
     this.solveArm(this.arms.right);
 
+    this.deformRobe();
+
     // Blink every few seconds.
     this.blinkAt -= dt;
     // Lid is the upper half of a sphere over the eye; swinging it forward closes the eye.
@@ -539,6 +713,36 @@ export class Avatar {
     const lidAngle = 0.62 - close * 1.95; // tilted back = open, forward = closed
     this.eyelids.forEach(e => { e.rotation.x += (lidAngle - e.rotation.x) * Math.min(1, dt * 25); });
     this.taperFlame.scale.set(0.022 + Math.sin(this.time * 23) * 0.002, 0.048 + Math.sin(this.time * 17) * 0.004, 1);
+  }
+
+  /** Bends the long robe along the average leg so it drapes over the lap when seated or kneeling. */
+  private deformRobe() {
+    if (!this.robe || !this.robeBase) return;
+    const L = this.legs.left, R = this.legs.right;
+    const a = (L.hip.rotation.x + R.hip.rotation.x) / 2;
+    const b = a + (L.knee.rotation.x + R.knee.rotation.x) / 2;
+    const thigh = 0.43;
+    const pos = this.robe.geometry.attributes.position as THREE.BufferAttribute;
+    const base = this.robeBase;
+    for (let i = 0; i < pos.count; i += 1) {
+      const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+      const h = Math.max(0, -y - 0.03);
+      let cy: number, cz: number;
+      if (h <= thigh) { cy = -0.03 - Math.cos(a) * h; cz = -Math.sin(a) * h; }
+      else {
+        const r = h - thigh;
+        cy = -0.03 - Math.cos(a) * thigh - Math.cos(b) * r;
+        cz = -Math.sin(a) * thigh - Math.sin(b) * r;
+      }
+      // The cross-section turns with the leg so the cloth wraps the thighs instead of flattening.
+      const th = THREE.MathUtils.lerp(a, b, smooth((h - thigh + 0.08) / 0.16));
+      const oy = -z * Math.sin(th), oz = z * Math.cos(th);
+      // Hem never sinks through the floor (pelvis height above ground).
+      const floor = -this.pelvis.position.y + 0.02;
+      pos.setXYZ(i, x, Math.max(floor, cy + oy), cz + oz);
+    }
+    pos.needsUpdate = true;
+    this.robe.geometry.computeVertexNormals();
   }
 
   private applyVeil() {
@@ -570,7 +774,7 @@ export class Avatar {
         const fn = f.clone().normalize();
         return flat(fromTip(tip, fn), fn, towardBody, pole);
       };
-      const forehead = key(V(0.0, HEAD_CENTER.y + 0.045, -0.118), V(-0.22, 0.8, 0.5));
+      const forehead = key(V(0.0, HEAD_CENTER.y + 0.05, -0.136), V(-0.22, 0.8, 0.5));
       const chest = key(V(0.0, -0.01, -0.128), V(-0.3, 0.55, 0.78));
       const lShoulder = key(V(-0.168, 0.045, -0.045), V(-0.6, 0.52, 0.6));
       const rShoulder = key(V(0.168, 0.045, -0.045), V(0.05, 0.72, 0.69));
@@ -607,8 +811,8 @@ export class Avatar {
     }
     if (g === 'veilOn' || g === 'veilOff') {
       // Both hands lift the veil above the head and lower it onto the hair (or the reverse).
-      const above = (s: Side) => flat(fromTip(V(0.095 * s, HEAD_CENTER.y + 0.17, -0.02), V(0.15 * s, 1, 0.1)), V(0.15 * s, 1, 0.1), V(-s, 0, 0), V(1 * s, -0.5, 0.3), 0.55);
-      const temple = (s: Side) => flat(fromTip(V(0.1 * s, HEAD_CENTER.y + 0.02, -0.0), V(0.1 * s, 1, 0.15)), V(0.1 * s, 1, 0.15), V(-s, 0, 0), V(1 * s, -0.6, 0.3), 0.5);
+      const above = (s: Side) => flat(fromTip(V(0.11 * s, HEAD_CENTER.y + 0.2, -0.02), V(0.15 * s, 1, 0.1)), V(0.15 * s, 1, 0.1), V(-s, 0, 0), V(1 * s, -0.5, 0.3), 0.55);
+      const temple = (s: Side) => flat(fromTip(V(0.135 * s, HEAD_CENTER.y + 0.02, -0.0), V(0.1 * s, 1, 0.15)), V(0.1 * s, 1, 0.15), V(-s, 0, 0), V(1 * s, -0.6, 0.3), 0.5);
       const on = g === 'veilOn';
       const seq = (s: Side): [number, ArmTarget][] => on
         ? [[0, cloneTarget(s > 0 ? restR : restL)], [0.7, above(s)], [1.0, above(s)], [1.7, temple(s)], [1.9, temple(s)], [2.5, cloneTarget(s > 0 ? restR : restL)]]
