@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Intention = { id: string; text: string; createdAt: string };
+const Chapel3DScene = dynamic(() => import('./Chapel3DScene'), { ssr: false, loading: () => <div className="scene3d-loading">성당 공간을 준비하고 있습니다...</div> });
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
@@ -19,6 +21,8 @@ export default function ChapelExperience() {
   const [notice, setNotice] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.35);
+  const [sceneCandles, setSceneCandles] = useState(7);
+  const handleCandleChange = useCallback((count: number) => setSceneCandles(count), []);
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (!supabaseUrl || !supabaseKey) return;
@@ -105,7 +109,7 @@ export default function ChapelExperience() {
       <header className="topbar"><a className="brand" href="#"><span className="brand-mark">✝</span><span>RELIGION<small>함께 머무는 기도의 공간</small></span></a><div className="top-meta"><span className="live-dot" /> 온라인 기도 공간 <span className="meta-divider" /> 가톨릭 · 본당 공동체</div></header>
       <section className="hero">
         <div className="hero-copy"><p className="eyebrow">A QUIET PLACE TO PRAY</p><h1>잠시 머물며,<br/><em>함께 기도합니다.</em></h1><p className="hero-description">마음에 담아둔 지향을 촛불에 맡기고,<br/>우리 공동체의 기도를 하나로 모아보세요.</p><a className="hero-link" href="#offering">기도 봉헌하기 <span>↓</span></a></div>
-        <div className="chapel-scene" aria-label="촛불이 밝혀진 성당 내부 분위기"><div className="window-glow" /><div className="altar-cross">✝</div><div className="altar-line" /><div className="candle-row"><i/><i/><i/><i/><i/></div><div className="scene-caption">IN HIS PEACE · IN OUR PRAYER</div></div>
+        <div className="chapel-scene"><Chapel3DScene onCandleChange={handleCandleChange} /></div>
       </section>
       <div className="content-grid">
         <section className="panel offering-panel" id="offering">
@@ -120,7 +124,7 @@ export default function ChapelExperience() {
           <div className="section-kicker">02 / A MOMENT OF PRAYER</div><h2>마음을 모으는 짧은 기도</h2><p className="section-intro">잠시 멈추고 마음을 가다듬으며, 오늘의 기도를 시작해 보세요.</p>
           <div className="prayer-guide-visual"><span>✝</span><i></i></div>
           <blockquote className="prayer-quote">“주님, 제 마음 안에 머무르시고<br/>오늘의 걸음을 평화로 이끌어 주소서.”</blockquote>
-          <p className="micro-copy">잠시 침묵한 뒤, 마음에 담긴 기도 지향을 봉헌해 보세요.</p>
+          <p className="micro-copy">성당 안에 밝혀진 촛불 {sceneCandles}개와 함께 잠시 침묵하며 기도해 보세요.</p>
         </section>
         <section className="panel chant-panel">
           <div className="section-kicker">03 / GREGORIAN CHANT</div><div className="chant-layout"><div><h2>고요히 흐르는 성가</h2><p className="section-intro">그레고리오 성가와 함께 기도의 시간을 가져보세요.</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>Veni Sancte Spiritus</strong><small>그레고리오 성가 · 성령 송가</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
