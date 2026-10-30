@@ -540,26 +540,30 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     for (let x = 4; x <= 16; x += 2) {
       addMesh(world, new THREE.BoxGeometry(1.85, 0.055, 2.05), pathMat, x, 0.015, 49.5, false, true);
     }
+
     const maryGrotto = new THREE.Group();
     maryGrotto.position.set(16.4, 0, 49.5);
     world.add(maryGrotto);
-    addBox(maryGrotto, 3.65, 4.2, 1.35, darkStone, 0, 2.1, 0);
-    addBox(maryGrotto, 2.7, 0.28, 1.8, trim, 0, 4.15, -0.12);
-    // Real photograph of a Lourdes statue is mapped onto a vertical plane inside a
-    // sculpted 3D stone frame. This is a photo-textured display, not a claimed 3D scan.
+    // Open-front rocky alcove facing the path: back, side returns, roof and stone plinth.
+    addBox(maryGrotto, 0.7, 4.2, 3.65, darkStone, 0.85, 2.1, 0);
+    addBox(maryGrotto, 2.45, 4.2, 0.55, darkStone, -0.08, 2.1, -1.55);
+    addBox(maryGrotto, 2.45, 4.2, 0.55, darkStone, -0.08, 2.1, 1.55);
+    addBox(maryGrotto, 2.45, 0.48, 3.65, darkStone, -0.08, 4.0, 0);
+    addBox(maryGrotto, 2.45, 0.3, 3.65, darkStone, -0.08, 0.15, 0);
+    addBox(maryGrotto, 2.7, 0.22, 3.85, trim, -0.1, 4.25, 0);
 
+    // Real Lourdes statue photograph is recessed behind a dimensional statue and arch.
     const maryImage = new THREE.Mesh(
       new THREE.PlaneGeometry(1.75, 2.25),
       new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.92, side: THREE.DoubleSide })
     );
-    // Face the photo-textured reference and the 3D statue toward the garden approach.
-    maryImage.position.set(-1.42, 2.55, 0);
+    maryImage.position.set(0.38, 2.55, 0);
     maryImage.rotation.y = -Math.PI / 2;
     maryGrotto.add(maryImage);
 
     // Volumetric Marian sculpture: carved robe, blue mantle, veil, face and joined hands.
     const maryStatue = new THREE.Group();
-    maryStatue.position.set(-1.72, 0, 0);
+    maryStatue.position.set(-0.82, 0, 0);
     maryGrotto.add(maryStatue);
     const statueIvory = makeMat('#eee9de', 0.74, 0.02);
     const statueBlue = makeMat('#526f9d', 0.78, 0.02);
@@ -587,35 +591,32 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     addMesh(maryStatue, new THREE.SphereGeometry(0.085, 14, 12), statueSkin, 0.06, 1.94, -0.3);
     addMesh(maryStatue, new THREE.ConeGeometry(0.07, 0.32, 10), trim, 0, 3.22, 0.02);
 
-    addBox(maryGrotto, 2.1, 0.12, 0.18, trim, -1.88, 1.35, 0);
-    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, -1.88, 2.62, -1.0);
-    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, -1.88, 2.62, 1.0);
+    // Carved stone frame around the image and statue, open to the west.
+    addBox(maryGrotto, 0.15, 2.6, 0.16, trim, -1.28, 2.5, -1.0);
+    addBox(maryGrotto, 0.15, 2.6, 0.16, trim, -1.28, 2.5, 1.0);
     const maryArchCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-1.9, 3.72, -1.08),
-      new THREE.Vector3(-1.9, 4.05, -0.9),
-      new THREE.Vector3(-1.9, 4.28, -0.48),
-      new THREE.Vector3(-1.9, 4.36, 0),
-      new THREE.Vector3(-1.9, 4.28, 0.48),
-      new THREE.Vector3(-1.9, 4.05, 0.9),
-      new THREE.Vector3(-1.9, 3.72, 1.08),
+      new THREE.Vector3(-1.28, 3.72, -1.08),
+      new THREE.Vector3(-1.28, 4.05, -0.9),
+      new THREE.Vector3(-1.28, 4.28, -0.48),
+      new THREE.Vector3(-1.28, 4.36, 0),
+      new THREE.Vector3(-1.28, 4.28, 0.48),
+      new THREE.Vector3(-1.28, 4.05, 0.9),
+      new THREE.Vector3(-1.28, 3.72, 1.08),
     ]);
     maryGrotto.add(new THREE.Mesh(new THREE.TubeGeometry(maryArchCurve, 48, 0.12, 10, false), trim));
-    for (const x of [-1.18, 1.18]) {
-      addCylinder(maryGrotto, 0.12, 0.2, 1.2, darkWood, x, 0.62, -0.18, 12);
-      addCylinder(maryGrotto, 0.12, 0.12, 0.38, ivory, x, 1.42, -0.18, 16);
-      addMesh(maryGrotto, new THREE.ConeGeometry(0.075, 0.22, 10), makeMat('#f4ce82', 0.35, 0.05), x, 1.72, -0.18, false, false);
+    for (const z of [-1.2, 1.2]) {
+      addCylinder(maryGrotto, 0.12, 0.2, 1.2, darkWood, -1.05, 0.62, z, 12);
+      addCylinder(maryGrotto, 0.12, 0.12, 0.38, ivory, -1.05, 1.42, z, 16);
+      addMesh(maryGrotto, new THREE.ConeGeometry(0.075, 0.22, 10), makeMat('#f4ce82', 0.35, 0.05), -1.05, 1.72, z, false, false);
       const candleGlow = new THREE.PointLight('#ffcf88', 0.5, 2.8, 2);
-      candleGlow.position.set(x, 1.9, -0.18);
+      candleGlow.position.set(-1.05, 1.9, z);
       maryGrotto.add(candleGlow);
     }
-    // A small kneeler and resting rail set a clear personal prayer spot.
-    addBox(maryGrotto, 2.0, 0.18, 0.48, wood, 0, 0.68, 1.52);
-    addBox(maryGrotto, 2.0, 0.68, 0.16, wood, 0, 1.02, 1.72);
-    // A kneeler and low seat mark the place to pause and pray.
-    addBox(maryGrotto, 1.55, 0.18, 0.52, wood, 0, 0.62, 1.45);
-    addBox(maryGrotto, 1.55, 0.72, 0.16, wood, 0, 0.98, 1.75);
+    // Kneeler faces the statue, leaving clear space between the path and the grotto.
+    addBox(maryGrotto, 0.62, 0.18, 1.55, wood, -2.05, 0.62, 0);
+    addBox(maryGrotto, 0.16, 0.72, 1.55, wood, -2.28, 0.98, 0);
     addBlocker(16.4, 49.5, 1.75, 1.2);
-    addBlocker(16.4, 50.95, 0.95, 0.35);
+    addBlocker(14.35, 49.5, 0.2, 0.95);
 
     // A real cathedral photograph is presented as a framed architectural reference panel
     // mounted on the side-aisle wall, integrated into the surrounding 3D masonry.
@@ -1135,7 +1136,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
   return (
     <div className="immersive-avatar-stage">
-      <div ref={hostRef} className="immersive-avatar-canvas" aria-label="하나로 이어진 3D 성당과 정원. 클릭 후 WASD로 이동하고 마우스로 시점을 조작하세요." />
+      <div ref={hostRef} className="immersive-avatar-canvas" aria-label="하나로 이어진 3D 성당과 정원. WASD 또는 방향키로 이동하고, 클릭이나 터치로 목적지를 지정하세요." />
       {nearFont && step !== 'done' ? (
         <div className="holy-water-actions" role="group" aria-label="성수대 액션">
           <span aria-hidden="true">{step === 'water' ? '✧' : '✝'}</span>
