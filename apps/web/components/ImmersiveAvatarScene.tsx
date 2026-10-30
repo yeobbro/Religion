@@ -109,14 +109,16 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       texture.repeat.set(12, 7);
     });
     stoneColorMap.colorSpace = THREE.SRGBColorSpace;
-    // Actual photographs licensed for reuse: nave (CC BY-SA 4.0), grotto (CC BY 4.0),
-    // marble floor (CC0), vaulted ceiling (CC0), and cathedral facade (CC BY-SA 4.0).
-    const cathedralInteriorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Interior_of_St._Vitus_Cathedral%2C_Nave%2C_Prague_20160809_1.jpg/1280px-Interior_of_St._Vitus_Cathedral%2C_Nave%2C_Prague_20160809_1.jpg');
-    const maryShrinePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/EstatuaGrutadeLourdes-MDP.jpg?width=1280');
-    const marbleFloorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Milan_Cathedral%2C_floor.jpg/1280px-Milan_Cathedral%2C_floor.jpg');
-    const vaultedCeilingPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Gloucester_Cathedral_Vaulted_Ceiling.jpg/1356px-Gloucester_Cathedral_Vaulted_Ceiling.jpg');
-    const exteriorFacadePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Gloucester_Cathedral_exterior_front.jpg?width=1800');
-    const courtyardPhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Gloucester_Cathedral_courtyard.JPG?width=1600');
+    // Real cathedral photographs from Wikimedia Commons, served from /public so they always load.
+    // Hotlinking Commons failed in browsers: Special:FilePath redirects carry no CORS header (WebGL
+    // refuses the texture), non-standard thumbnail widths return 400, and repeated loads hit 429.
+    // Licences and authors: public/textures/photos/CREDITS.md (also shown in the on-screen credit line).
+    const cathedralInteriorPhoto = textureLoader.load('/textures/photos/nave.jpg');
+    const maryShrinePhoto = textureLoader.load('/textures/photos/marian-statue.jpg');
+    const marbleFloorPhoto = textureLoader.load('/textures/photos/marble-floor.jpg');
+    const vaultedCeilingPhoto = textureLoader.load('/textures/photos/vaulted-ceiling.jpg');
+    const exteriorFacadePhoto = textureLoader.load('/textures/photos/facade.jpg');
+    const courtyardPhoto = textureLoader.load('/textures/photos/courtyard.jpg');
     for (const texture of [cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto, courtyardPhoto]) {
       texture.colorSpace = THREE.SRGBColorSpace;
     }
