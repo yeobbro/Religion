@@ -779,7 +779,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     });
     const rosaryCordMaterial = makeMat('#6d5a42', 0.85, 0);
     const ringPoints: THREE.Vector3[] = [];
-    const ringCount = 55;
+    const ringCount = 55; // 50 small Hail Mary beads + five larger decade beads
     for (let i = 0; i <= ringCount; i += 1) {
       const angle = (Math.PI * 2 * i) / ringCount;
       ringPoints.push(new THREE.Vector3(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0));
@@ -862,7 +862,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       rosary.visible = false;
     };
     const setWalkTarget = (clientX: number, clientY: number) => {
-      if (isSitting) standUp();
+      const wasSitting = isSitting;
+      if (wasSitting) standUp();
       const rect = host.getBoundingClientRect();
       const ndc = new THREE.Vector2(((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
         -(((clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1));
@@ -874,7 +875,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         THREE.MathUtils.clamp(point.z, worldBounds.minZ, worldBounds.maxZ));
       pendingSeat = null;
       pendingAction = null;
-      gesture.current = 'idle';
+      if (!wasSitting) gesture.current = 'idle';
       rosary.visible = false;
       setActionNotice('목표 지점으로 이동합니다.');
     };
@@ -934,10 +935,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         return;
       }
       if (action === 'mary') {
-        if (isSitting) standUp();
+        const wasSitting = isSitting;
+        if (wasSitting) standUp();
         pendingSeat = null; pendingAction = 'kneel';
         movementTarget = new THREE.Vector3(13.15,0,49.5);
-        gesture.current = 'idle'; rosary.visible = false;
+        if (!wasSitting) gesture.current = 'idle';
+        rosary.visible = false;
         setActionNotice('정원에 있는 성모 마리아 기도처로 이동합니다.');
         return;
       }
@@ -1023,7 +1026,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       let moveX = 0, moveZ = 0, moving = false;
       if (manualMoving) {
         movementTarget = null; pendingSeat = null; pendingAction = null;
-        if (isSitting) standUp();
+        if (isSitting) {
+          standUp();
+        } else if (gesture.current !== 'idle' && gesture.current !== 'stand') {
+          gesture.current = 'idle';
+          avatar.position.y = 0;
+          rosary.visible = false;
+        }
         const length = Math.hypot(forward, sideways) || 1;
         const f = forward / length, side = sideways / length;
         moveX = Math.sin(yaw) * f + Math.cos(yaw) * side;
@@ -1043,11 +1052,16 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
             avatar.rotation.y = 0; yaw = 0; isSitting = true;
             gesture.current = 'sit'; gestureAt.current = performance.now();
             setActionNotice('가까운 빈자리에 앉았습니다. 이동하면 천천히 일어납니다.');
-          } else if (pendingAction === 'prayer') {
-            pendingAction = null; avatar.rotation.y = Math.PI/2;
-            yaw = Math.PI/2;
-            gesture.current = pendingAction === 'kneel' ? 'kneel' : 'prayer'; gestureAt.current = performance.now();
-            setActionNotice('성모님 앞에 무릎을 꿇고 기도합니다.');
+          } else if (pendingAction) {
+            const completedAction = pendingAction;
+            pendingAction = null;
+            avatar.rotation.y = Math.PI / 2;
+            yaw = Math.PI / 2;
+            gesture.current = completedAction;
+            gestureAt.current = performance.now();
+            setActionNotice(completedAction === 'kneel'
+              ? '성모님 앞에 무릎을 꿇고 기도합니다.'
+              : '성모님 앞에서 두 손을 모아 기도합니다.');
           }
         }
       }
