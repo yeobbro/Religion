@@ -21,3 +21,11 @@
 .scene3d-bottom{position:absolute;left:16px;right:16px;bottom:14px;display:flex;justify-content:space-between;gap:10px;color:#e6ddcb;font-size:9px;text-shadow:0 1px 4px #000;pointer-events:none}
 .scene3d-loading{height:420px;display:grid;place-items:center;background:#171a18;color:#d6c8ac;font-size:12px}
 @media(max-width:760px){.chapel-scene{height:360px}.scene3d-bottom{font-size:8px}.scene3d-hint{max-width:125px;text-align:right;line-height:1.5}.scene3d-overlay{top:12px}.scene3d-loading{height:360px}}
+
+/* Space selector and garden environment */
+.chapel-scene{position:relative}
+.space-switch{position:absolute;z-index:5;top:52px;left:16px;display:flex;gap:6px}
+.space-switch button{border:1px solid #e9dfc9;background:#242a24b8;color:#f3ead9;padding:8px 12px;font-size:10px;letter-spacing:.3px;cursor:pointer;backdrop-filter:blur(8px)}
+.space-switch button.active{background:#e9dfc9;color:#29271f}
+.scene3d-wrap{isolation:isolate}
+@media(max-width:760px){.space-switch{top:48px}.space-switch button{padding:7px 10px;font-size:9px}}
