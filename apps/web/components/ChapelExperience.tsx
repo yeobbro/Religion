@@ -1,18 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
+import { useEffect, useRef, useState } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { useReligionRoom } from '@/lib/use-religion-room';
 
 type Intention = { id: string; text: string; createdAt: string };
-const Chapel3DScene = dynamic(() => import('./Chapel3DScene'), { ssr: false, loading: () => <div className="scene3d-loading">성당 공간을 준비하고 있습니다...</div> });
-const Garden3DScene = dynamic(() => import('./Garden3DScene'), { ssr: false, loading: () => <div className="scene3d-loading">정원을 준비하고 있습니다...</div> });
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
 const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || 'https://upload.wikimedia.org/wikipedia/commons/9/96/Veni.sancte.spiritus.ogg';
 const gardenAudioUrl = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Gentle_breeze_and_birds_singing.ogg';
+const chapelPhotoUrl = 'https://images.unsplash.com/photo-1759432916468-d44411b5a661?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=2400';
+const gardenPhotoUrl = 'https://images.unsplash.com/photo-1778305071414-3aab2bda751a?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=2400';
 
 export default function ChapelExperience() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -24,12 +23,11 @@ export default function ChapelExperience() {
   const [notice, setNotice] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.35);
-  const [sceneCandles, setSceneCandles] = useState(7);
   const [space, setSpace] = useState<'chapel' | 'garden'>('chapel');
+  const [immersive, setImmersive] = useState(false);
   const room = useReligionRoom(space);
   const [quietSeconds, setQuietSeconds] = useState(180);
   const [quietRunning, setQuietRunning] = useState(false);
-  const handleCandleChange = useCallback((count: number) => setSceneCandles(count), []);
 
   useEffect(() => {
     if (!quietRunning) return;
@@ -133,12 +131,94 @@ export default function ChapelExperience() {
     else { try { await audio.play(); setIsPlaying(true); } catch { setNotice('음원을 재생할 수 없어요. 음원 주소를 확인해 주세요.'); } }
   };
 
+  const enterImmersive = () => {
+    setImmersive(true);
+    if (document.fullscreenEnabled && !document.fullscreenElement) {
+      void document.documentElement.requestFullscreen().catch(() => undefined);
+    }
+  };
+
+  const leaveImmersive = () => {
+    setImmersive(false);
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  };
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setImmersive(false);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  if (immersive) {
+    const photo = space === 'chapel' ? chapelPhotoUrl : gardenPhotoUrl;
+    return (
+      <main className={`immersive-room ${space === 'chapel' ? 'immersive-chapel' : 'immersive-garden'}`}>
+        <div className="immersive-photo" style={{ backgroundImage: `url("${photo}")` }} />
+        <div className="immersive-shade" />
+        <header className="immersive-toolbar">
+          <div className="immersive-player">
+            <span className="immersive-avatar-mark">Y</span>
+            <span><strong>Yden</strong><small>내 아바타 · 접속 중</small></span>
+          </div>
+          <div className="immersive-space-switch" aria-label="공간 선택">
+            <button type="button" className={space === 'chapel' ? 'active' : ''} onClick={() => setSpace('chapel')}>성당</button>
+            <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
+          </div>
+          <button type="button" className="immersive-exit" onClick={leaveImmersive}>나가기 <span>↗</span></button>
+        </header>
+        <section className="immersive-world">
+          <div className="immersive-copy">
+            <span className="immersive-kicker">{space === 'chapel' ? 'A QUIET PLACE TO PRAY' : 'A QUIET PLACE IN NATURE'}</span>
+            <h1>{space === 'chapel' ? <>잠시 멈추고,<br/><em>마음에 평화를.</em></> : <>자연 속에서,<br/><em>천천히 쉬어가기.</em></>}</h1>
+            <p>{space === 'chapel' ? '고요한 성당 안에서 나만의 기도와 묵상의 시간을 가져보세요.' : '물소리와 나무가 있는 정원에서 마음을 가라앉히고 잠시 머물러 보세요.'}</p>
+          </div>
+          <div className="world-avatar" role="img" aria-label="Yden의 아바타">
+            <span className="world-avatar-hair" />
+            <span className="world-avatar-head" />
+            <span className="world-avatar-neck" />
+            <span className="world-avatar-backpack" />
+            <span className="world-avatar-body" />
+            <span className="world-avatar-arm world-avatar-arm-left" />
+            <span className="world-avatar-arm world-avatar-arm-right" />
+            <span className="world-avatar-leg world-avatar-leg-left" />
+            <span className="world-avatar-leg world-avatar-leg-right" />
+            <span className="world-avatar-shoe world-avatar-shoe-left" />
+            <span className="world-avatar-shoe world-avatar-shoe-right" />
+          </div>
+          <div className="immersive-presence" aria-live="polite">
+            <span className={room.status === 'connected' ? 'room-presence-dot connected' : 'room-presence-dot'} />
+            {room.status === 'connected' ? <>현재 공간 <strong>{room.occupancy}/{room.capacity}명</strong>{room.seatNumber ? <span> · 좌석 {room.seatNumber}</span> : null}</> : room.status === 'connecting' ? '공간 연결 중...' : '개인 체험 공간'}
+          </div>
+        </section>
+        <footer className="immersive-footer">
+          <span>{space === 'chapel' ? 'Photo by Georgi Kalaydzhiev' : 'Photo by Shawn Kim'} · Unsplash</span>
+          <span>ESC 키 또는 나가기로 화면 복귀</span>
+        </footer>
+      </main>
+    );
+  }
+
   return (
     <div className="chapel-shell">
       <header className="topbar"><a className="brand" href="#"><span className="brand-mark">✝</span><span>RELIGION<small>함께 머무는 기도의 공간</small></span></a><div className="top-meta"><span className="live-dot" /> 온라인 기도 공간 <span className="meta-divider" /> 가톨릭 · 본당 공동체</div></header>
       <section className="hero">
         <div className="hero-copy"><p className="eyebrow">A QUIET PLACE TO PRAY</p><h1>잠시 머물며,<br/><em>함께 기도합니다.</em></h1><p className="hero-description">마음에 담아둔 지향을 촛불에 맡기고,<br/>우리 공동체의 기도를 하나로 모아보세요.</p><a className="hero-link" href="#offering">기도 봉헌하기 <span>↓</span></a></div>
-        <div className="chapel-scene"><div className="space-switch"><button className={space === "chapel" ? "active" : ""} onClick={() => setSpace("chapel")}>성당 내부</button><button className={space === "garden" ? "active" : ""} onClick={() => setSpace("garden")}>외부 정원</button></div>{space === "chapel" ? <Chapel3DScene onCandleChange={handleCandleChange} /> : <Garden3DScene />}<div className="room-presence" aria-live="polite"><span className={room.status === 'connected' ? 'room-presence-dot connected' : 'room-presence-dot'} />{room.status === 'connected' ? <>현재 공간 <strong>{room.occupancy}/{room.capacity}명</strong>{room.seatNumber ? <span> · 좌석 {room.seatNumber}</span> : null}</> : room.status === 'connecting' ? '공간에 입장하는 중...' : room.status === 'error' ? '실시간 연결을 사용할 수 없습니다' : '실시간 공간 연결 준비 중'}</div></div>
+        <div className="lobby-visual" style={{ backgroundImage: `linear-gradient(180deg,rgba(13,17,15,.16),rgba(13,17,15,.18) 42%,rgba(13,17,15,.82)), url("${space === 'chapel' ? chapelPhotoUrl : gardenPhotoUrl}")` }}>
+          <div className="lobby-topline"><span>{space === 'chapel' ? 'CATHOLIC CHAPEL' : 'QUIET GARDEN'}</span><span className="lobby-online"><i /> {room.status === 'connected' ? `${room.occupancy}명 머무는 중` : '나만의 공간'}</span></div>
+          <div className="lobby-space-switch">
+            <button type="button" className={space === 'chapel' ? 'active' : ''} onClick={() => setSpace('chapel')}>성당</button>
+            <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
+          </div>
+          <div className="lobby-bottom">
+            <div className="lobby-avatar-card"><span className="lobby-avatar-mark">Y</span><span><strong>Yden</strong><small>내 아바타 · 입장 준비 완료</small></span></div>
+            <button type="button" className="lobby-enter" onClick={enterImmersive}>내 아바타로 입장 <span>→</span></button>
+          </div>
+          <div className="lobby-photo-credit">{space === 'chapel' ? 'Photo by Georgi Kalaydzhiev' : 'Photo by Shawn Kim'} · Unsplash</div>
+        </div>
       </section>
       <div className="content-grid">
         <section className="panel offering-panel" id="offering">
@@ -161,7 +241,7 @@ export default function ChapelExperience() {
               <button type="button" className="quiet-reset" onClick={() => { setQuietRunning(false); setQuietSeconds(180); }}>초기화</button>
             </div>
           </div>
-          <p className="micro-copy">성당 안에 밝혀진 촛불 {sceneCandles}개와 함께 잠시 침묵하며 기도해 보세요.</p>
+          <p className="micro-copy">조용한 공간에서 잠시 침묵하며 기도의 시간을 가져보세요.</p>
         </section>
         <section className="panel chant-panel">
           <div className="section-kicker">03 / {space === 'chapel' ? 'GREGORIAN CHANT' : 'GARDEN AMBIENCE'}</div><div className="chant-layout"><div><h2>{space === 'chapel' ? '고요히 흐르는 성가' : '정원에 머무는 자연의 소리'}</h2><p className="section-intro">{space === 'chapel' ? '그레고리오 성가와 함께 기도의 시간을 가져보세요.' : '산들바람과 새소리가 흐르는 정원에서 잠시 쉬어가세요.'}</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>{space === 'chapel' ? 'Veni Sancte Spiritus' : 'Gentle Breeze and Birds'}</strong><small>{space === 'chapel' ? '그레고리오 성가 · 성령 송가' : '정원 자연음 · 산들바람과 새소리'}</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
