@@ -112,3 +112,39 @@
   .immersive-toolbar{padding:12px;min-height:65px;gap:8px}.immersive-player{min-width:0;gap:7px}.immersive-player small{display:none}.immersive-avatar-mark{width:34px;height:34px;font-size:17px}.immersive-player strong{font-size:11px}.immersive-space-switch{gap:2px;padding:3px}.immersive-space-switch button{padding:9px 12px;font-size:10px}.immersive-exit{padding:9px 11px;font-size:9px}.immersive-copy{left:22px;top:17vh;width:78vw}.immersive-copy h1{font-size:38px}.immersive-copy p{max-width:270px;font-size:11px}.world-avatar{width:155px;height:300px;min-height:0}.immersive-presence{right:12px;bottom:42px;padding:9px 11px;font-size:8px}.immersive-footer{left:12px;right:12px;bottom:12px;font-size:7px}.immersive-footer span:last-child{display:none}
 }
 @media(prefers-reduced-motion:reduce){.lobby-enter,.immersive-photo{transition:none}}
+
+
+/* Full-screen 3D visitor and holy-water ritual */
+.immersive-world{position:absolute;inset:0;overflow:hidden}
+.immersive-copy,.world-avatar,.immersive-presence,.immersive-footer{display:none!important}
+.immersive-avatar-stage{position:absolute;inset:0;overflow:hidden;touch-action:none}
+.immersive-avatar-canvas{position:absolute;inset:0;z-index:1;touch-action:none;cursor:grab}
+.immersive-avatar-canvas:active{cursor:grabbing}
+.immersive-avatar-canvas canvas{display:block;width:100%;height:100%;outline:0}
+.immersive-toolbar{z-index:10;pointer-events:none}
+.immersive-toolbar>*{pointer-events:auto}
+.immersive-player{min-width:0;width:42px;height:42px;display:grid;place-items:center}
+.immersive-avatar-mark{width:38px;height:38px}
+.immersive-space-switch{margin-left:auto;margin-right:8px}
+.immersive-exit{width:40px;height:40px;display:grid;place-items:center;padding:0;font-size:24px;line-height:1}
+.holy-water-actions{position:absolute;z-index:12;left:50%;bottom:clamp(34px,10vh,100px);transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #f5ead077;border-radius:999px;background:#111713d9;box-shadow:0 10px 38px #0005;backdrop-filter:blur(16px);white-space:nowrap}
+.holy-water-actions>span{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:#e8dcc4;color:#6a5636;font-size:17px}
+.holy-water-primary,.holy-water-skip{border:0;border-radius:999px;padding:12px 17px;font-size:11px;cursor:pointer}
+.holy-water-primary{background:#f3ead9;color:#28241d;font-weight:700}
+.holy-water-primary:hover{background:#fff}
+.holy-water-skip{background:transparent;color:#eee4d3}
+.holy-water-skip:hover{background:#ffffff18}
+.avatar-touch-pad{z-index:11;bottom:36px;left:20px;right:auto}
+.avatar-touch-pad button{width:42px;height:42px}
+@media(max-width:760px){
+  .immersive-toolbar{padding:11px 12px;gap:8px}
+  .immersive-player{width:34px;height:34px}
+  .immersive-avatar-mark{width:32px;height:32px;font-size:17px}
+  .immersive-space-switch{margin-left:auto;margin-right:2px}
+  .immersive-space-switch button{padding:8px 12px;font-size:10px}
+  .immersive-exit{width:35px;height:35px;font-size:21px}
+  .holy-water-actions{bottom:118px;max-width:calc(100vw - 26px);gap:5px;padding:8px}
+  .holy-water-primary,.holy-water-skip{padding:11px 13px;font-size:10px}
+  .avatar-touch-pad{left:12px;bottom:24px}
+  .avatar-touch-pad button{width:36px;height:36px}
+}
