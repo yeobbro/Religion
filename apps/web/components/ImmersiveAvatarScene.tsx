@@ -95,6 +95,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
     const plaster = makeMat('#d7d0c0', 0.94, 0, makeNoiseTexture('#d7d0c0', 2, 4, 3));
     const darkPlaster = makeMat('#938d80', 0.94, 0, makeNoiseTexture('#938d80', 4, 3, 2));
+    const darkStone = makeMat('#53564e', 0.91, 0, makeNoiseTexture('#53564e', 18, 3, 2));
     const floorStone = makeMat('#827e72', 0.88, 0, makeNoiseTexture('#827e72', 6, 8, 14));
     const aisleStone = makeMat('#a28a67', 0.78, 0, makeNoiseTexture('#a28a67', 8, 2, 12));
     const trim = makeMat('#b49a6b', 0.42, 0.42);
