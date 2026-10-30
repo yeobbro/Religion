@@ -8,9 +8,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
 const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || 'https://upload.wikimedia.org/wikipedia/commons/9/96/Veni.sancte.spiritus.ogg';
-const supabase: SupabaseClient | null = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export default function ChapelExperience() {
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [intention, setIntention] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [intentions, setIntentions] = useState<Intention[]>([]);
@@ -21,12 +21,17 @@ export default function ChapelExperience() {
   const [volume, setVolume] = useState(0.35);
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
+    if (!supabaseUrl || !supabaseKey) return;
+    setSupabase(createClient(supabaseUrl, supabaseKey));
+  }, []);
+
+  useEffect(() => {
     if (!supabase) return;
     void (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) await supabase.auth.signInAnonymously();
     })();
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     if (!supabase || !parishId) return;
@@ -50,7 +55,7 @@ export default function ChapelExperience() {
         }
       }).subscribe();
     return () => { void supabase?.removeChannel(channel); };
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     if (!audioRef.current) return;
