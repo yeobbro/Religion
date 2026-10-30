@@ -34,8 +34,18 @@ export default function ChapelExperience() {
   }, []);
 
   useEffect(() => {
+    if (!supabase) return;
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) await supabase.auth.signInAnonymously();
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!supabase || !parishId) return;
     void loadCommunityCount();
+    void supabase.from('prayer_intentions').select('id, intention, created_at').eq('parish_id', parishId).eq('is_public', true).order('created_at', { ascending: false }).limit(20)
+      .then(({ data }) => setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at }))));
     const channel = supabase.channel('parish-rosary-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rosary_contributions', filter: `parish_id=eq.${parishId}` }, () => void loadCommunityCount())
       .subscribe();
@@ -56,7 +66,7 @@ export default function ChapelExperience() {
     if (text.length < 3) { setNotice('기도 지향을 세 글자 이상 입력해 주세요.'); return; }
     setLoading(true); setNotice('');
     if (supabase && parishId) {
-      const { error } = await supabase.from('prayer_intentions').insert({ parish_id: parishId, intention: text, is_public: isPublic, candle_lit: true });
+      const { error } = await supabase.from('prayer_intentions').insert({ parish_id: parishId, author_id: (await supabase.auth.getUser()).data.user?.id, intention: text, is_public: isPublic, candle_lit: true });
       if (error) setNotice('봉헌을 저장하지 못했어요. 로그인 및 Supabase 정책 설정을 확인해 주세요.');
       else if (isPublic) setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]);
       else setNotice('기도 지향을 비공개로 봉헌했어요.');
@@ -69,7 +79,7 @@ export default function ChapelExperience() {
 
   const contributeRosary = async () => {
     if (supabase && parishId) {
-      const { error } = await supabase.from('rosary_contributions').insert({ parish_id: parishId, decades: 5 });
+      const { error } = await supabase.from('rosary_contributions').insert({ parish_id: parishId, user_id: (await supabase.auth.getUser()).data.user?.id, decades: 5 });
       if (error) { setNotice('묵주 기록에 실패했어요. 로그인 상태와 본당 ID를 확인해 주세요.'); return; }
       await loadCommunityCount();
     } else {
