@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { useReligionRoom } from '@/lib/use-religion-room';
 
 type Intention = { id: string; text: string; createdAt: string };
 const Chapel3DScene = dynamic(() => import('./Chapel3DScene'), { ssr: false, loading: () => <div className="scene3d-loading">성당 공간을 준비하고 있습니다...</div> });
@@ -25,6 +26,7 @@ export default function ChapelExperience() {
   const [volume, setVolume] = useState(0.35);
   const [sceneCandles, setSceneCandles] = useState(7);
   const [space, setSpace] = useState<'chapel' | 'garden'>('chapel');
+  const room = useReligionRoom(space);
   const [quietSeconds, setQuietSeconds] = useState(180);
   const [quietRunning, setQuietRunning] = useState(false);
   const handleCandleChange = useCallback((count: number) => setSceneCandles(count), []);
@@ -136,7 +138,7 @@ export default function ChapelExperience() {
       <header className="topbar"><a className="brand" href="#"><span className="brand-mark">✝</span><span>RELIGION<small>함께 머무는 기도의 공간</small></span></a><div className="top-meta"><span className="live-dot" /> 온라인 기도 공간 <span className="meta-divider" /> 가톨릭 · 본당 공동체</div></header>
       <section className="hero">
         <div className="hero-copy"><p className="eyebrow">A QUIET PLACE TO PRAY</p><h1>잠시 머물며,<br/><em>함께 기도합니다.</em></h1><p className="hero-description">마음에 담아둔 지향을 촛불에 맡기고,<br/>우리 공동체의 기도를 하나로 모아보세요.</p><a className="hero-link" href="#offering">기도 봉헌하기 <span>↓</span></a></div>
-        <div className="chapel-scene"><div className="space-switch"><button className={space === "chapel" ? "active" : ""} onClick={() => setSpace("chapel")}>성당 내부</button><button className={space === "garden" ? "active" : ""} onClick={() => setSpace("garden")}>외부 정원</button></div>{space === "chapel" ? <Chapel3DScene onCandleChange={handleCandleChange} /> : <Garden3DScene />}</div>
+        <div className="chapel-scene"><div className="space-switch"><button className={space === "chapel" ? "active" : ""} onClick={() => setSpace("chapel")}>성당 내부</button><button className={space === "garden" ? "active" : ""} onClick={() => setSpace("garden")}>외부 정원</button></div>{space === "chapel" ? <Chapel3DScene onCandleChange={handleCandleChange} /> : <Garden3DScene />}<div className="room-presence" aria-live="polite"><span className={room.status === 'connected' ? 'room-presence-dot connected' : 'room-presence-dot'} />{room.status === 'connected' ? <>현재 공간 <strong>{room.occupancy}/{room.capacity}명</strong>{room.seatNumber ? <span> · 좌석 {room.seatNumber}</span> : null}</> : room.status === 'connecting' ? '공간에 입장하는 중...' : room.status === 'error' ? '실시간 연결을 사용할 수 없습니다' : '실시간 공간 연결 준비 중'}</div></div>
       </section>
       <div className="content-grid">
         <section className="panel offering-panel" id="offering">
