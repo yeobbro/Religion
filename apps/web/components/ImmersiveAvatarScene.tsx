@@ -670,7 +670,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     scene.add(avatar);
     const avatarPart = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) =>
       addMesh(avatar, geometry, material, x, y, z);
-    avatarPart(new THREE.CapsuleGeometry(0.31, 0.66, 5, 12), coat, 0, 1.34, 0);
+    const torso = avatarPart(new THREE.CapsuleGeometry(0.31, 0.66, 5, 12), coat, 0, 1.34, 0);
     avatarPart(new THREE.CylinderGeometry(0.1, 0.11, 0.18, 12), skin, 0, 1.85, 0);
     const head = avatarPart(new THREE.SphereGeometry(0.235, 18, 14), skin, 0, 2.08, -0.02);
     head.scale.set(0.92, 1.08, 0.95);
@@ -678,21 +678,53 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     hairCap.scale.set(1.02, 0.88, 1.03);
     avatarPart(new THREE.BoxGeometry(0.51, 0.68, 0.2), bag, 0, 1.34, 0.29);
 
-    const makeLimb = (x: number, y: number, mat: THREE.Material, length: number, radius: number) => {
-      const pivot = new THREE.Group();
-      pivot.position.set(x, y, 0);
-      avatar.add(pivot);
-      const limb = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length - radius * 2, 4, 10), mat);
-      limb.position.y = -length * 0.46;
-      limb.castShadow = true;
-      pivot.add(limb);
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), skin);
-      hand.position.y = -length;
-      pivot.add(hand);
-      return pivot;
+
+    const makeArm = (x: number, side: -1 | 1) => {
+      const upper = new THREE.Group();
+      upper.position.set(x, 1.64, 0);
+      avatar.add(upper);
+      const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.22, 5, 10), coatShadow);
+      upperArm.position.y = -0.16;
+      upperArm.castShadow = true;
+      upper.add(upperArm);
+      const forearm = new THREE.Group();
+      forearm.position.y = -0.31;
+      upper.add(forearm);
+      const lowerArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.088, 0.25, 5, 10), coatShadow);
+      lowerArm.position.y = -0.16;
+      lowerArm.castShadow = true;
+      forearm.add(lowerArm);
+      const hand = new THREE.Group();
+      hand.position.set(0, -0.32, -0.015);
+      forearm.add(hand);
+      const palm = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), skin);
+      palm.scale.set(0.78, 0.62, 0.42);
+      palm.position.y = -0.025;
+      hand.add(palm);
+      for (let finger = 0; finger < 4; finger += 1) {
+        const width = (finger - 1.5) * 0.044;
+        const length = [0.13, 0.16, 0.15, 0.12][finger];
+        const digit = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, length, 3, 8), skin);
+        digit.position.set(width, -0.105 - length * 0.28, -0.005);
+        digit.rotation.z = (finger - 1.5) * 0.07;
+        digit.castShadow = true;
+        hand.add(digit);
+      }
+      const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.105, 3, 8), skin);
+      thumb.position.set(side * 0.105, -0.055, -0.012);
+      thumb.rotation.z = side * -0.72;
+      thumb.castShadow = true;
+      hand.add(thumb);
+      return { upper, forearm, hand };
     };
-    const leftArm = makeLimb(-0.39, 1.64, coatShadow, 0.62, 0.105);
-    const rightArm = makeLimb(0.39, 1.64, coatShadow, 0.62, 0.105);
+    const leftArmRig = makeArm(-0.39, -1);
+    const rightArmRig = makeArm(0.39, 1);
+    const leftArm = leftArmRig.upper;
+    const rightArm = rightArmRig.upper;
+    const leftForearm = leftArmRig.forearm;
+    const rightForearm = rightArmRig.forearm;
+    const leftHand = leftArmRig.hand;
+    const rightHand = rightArmRig.hand;
     const makeLeg = (x: number) => {
       const pivot = new THREE.Group();
       pivot.position.set(x, 0.88, 0);
@@ -732,26 +764,56 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     nameLabel.scale.set(0.78, 0.15, 1);
     nameLabel.position.set(0, 2.72, 0);
     avatar.add(nameLabel);
-    // A small 3D rosary: ten visible beads and a cross held between the visitor's hands.
+
+    // Five-decade rosary: 50 small beads, five larger decade beads,
+    // three introductory beads, a centerpiece medal and a crucifix.
     const rosary = new THREE.Group();
-    rosary.position.set(0, 1.18, -0.22);
+    rosary.position.set(0, 1.32, -0.44);
     rosary.visible = false;
     avatar.add(rosary);
     const rosaryBeadMaterial = new THREE.MeshStandardMaterial({
-      color: '#e6d6bb', roughness: 0.35, metalness: 0.15, emissive: '#493c2a', emissiveIntensity: 0.08,
+      color: '#e6d6bb', roughness: 0.3, metalness: 0.12, emissive: '#493c2a', emissiveIntensity: 0.06,
     });
-    for (let i = 0; i < 10; i += 1) {
-      const angle = (Math.PI * 2 * i) / 10;
-      const bead = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), rosaryBeadMaterial);
-      bead.position.set(Math.cos(angle) * 0.23, Math.sin(angle) * 0.16, 0);
+    const rosaryLargeBeadMaterial = new THREE.MeshStandardMaterial({
+      color: '#c8aa72', roughness: 0.28, metalness: 0.48,
+    });
+    const rosaryCordMaterial = makeMat('#6d5a42', 0.85, 0);
+    const ringPoints: THREE.Vector3[] = [];
+    const ringCount = 50;
+    for (let i = 0; i <= ringCount; i += 1) {
+      const angle = (Math.PI * 2 * i) / ringCount;
+      ringPoints.push(new THREE.Vector3(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0));
+    }
+    const ringCurve = new THREE.CatmullRomCurve3(ringPoints);
+    rosary.add(new THREE.Mesh(new THREE.TubeGeometry(ringCurve, 120, 0.012, 6, false), rosaryCordMaterial));
+    for (let i = 0; i < ringCount; i += 1) {
+      const angle = (Math.PI * 2 * i) / ringCount;
+      const bead = new THREE.Mesh(
+        new THREE.SphereGeometry(0.026, 10, 8),
+        i % 10 === 0 ? rosaryLargeBeadMaterial : rosaryBeadMaterial,
+      );
+      bead.position.set(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0);
+      bead.scale.setScalar(i % 10 === 0 ? 1.38 : 1);
       rosary.add(bead);
     }
+    for (let i = 0; i < 3; i += 1) {
+      const bead = new THREE.Mesh(new THREE.SphereGeometry(0.027, 10, 8), rosaryBeadMaterial);
+      bead.position.set(0, -0.13 - i * 0.075, 0);
+      rosary.add(bead);
+    }
+    const centerpiece = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 14, 10),
+      new THREE.MeshStandardMaterial({ color: '#d6bd8d', roughness: 0.3, metalness: 0.32 }),
+    );
+    centerpiece.position.set(0, -0.39, 0);
+    centerpiece.scale.set(0.78, 1.18, 0.5);
+    rosary.add(centerpiece);
     const rosaryCross = new THREE.Group();
-    rosaryCross.position.set(0, -0.33, 0);
+    rosaryCross.position.set(0, -0.54, 0);
     rosary.add(rosaryCross);
-    const rosaryGold = makeMat('#c8aa72', 0.3, 0.6);
-    addMesh(rosaryCross, new THREE.BoxGeometry(0.055, 0.27, 0.045), rosaryGold, 0, 0, 0, false, false);
-    addMesh(rosaryCross, new THREE.BoxGeometry(0.19, 0.05, 0.045), rosaryGold, 0, 0.045, 0, false, false);
+    addMesh(rosaryCross, new THREE.BoxGeometry(0.052, 0.27, 0.035), rosaryLargeBeadMaterial, 0, 0, 0, false, false);
+    addMesh(rosaryCross, new THREE.BoxGeometry(0.18, 0.048, 0.035), rosaryLargeBeadMaterial, 0, 0.055, 0, false, false);
+
 
 
     // Available seats are reserved locally for the current visitor.
@@ -901,7 +963,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         gesture.current = action as 'cross'|'prayer'|'bow'|'greet';
         gestureAt.current = performance.now();
         const messages: Record<string,string> = {
-          cross:'성호경을 긋습니다.', prayer:'두 손을 모아 기도합니다.',
+          cross:'이마 → 가슴 → 왼쪽 어깨 → 오른쪽 어깨 순서로 성호경을 긋습니다.', prayer:'두 손을 모아 기도합니다.',
           bow:'정중하게 목례합니다.', greet:'손을 들어 인사합니다.'
         };
         setActionNotice(messages[action]);
@@ -979,7 +1041,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           if (pendingSeat !== null) {
             const index = pendingSeat, seat = seatSpots[index];
             occupiedSeats.add(index); currentSeat = index; pendingSeat = null;
-            avatar.position.set(seat.x,0.2,seat.z+0.2);
+            avatar.position.set(seat.x,0,seat.z);
             avatar.rotation.y = 0; isSitting = true;
             gesture.current = 'sit'; gestureAt.current = performance.now();
             setActionNotice('비어 있던 자리에 앉았습니다. 이동하면 다시 일어납니다.');
@@ -1003,52 +1065,115 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         leftLeg.rotation.x = gait; rightLeg.rotation.x = -gait;
       }
       leftArm.rotation.x = -gait*0.42; rightArm.rotation.x = gait*0.42;
-      leftArm.rotation.z = 0; rightArm.rotation.z = 0; head.rotation.x = 0;
+      leftArm.rotation.z = 0; rightArm.rotation.z = 0;
+      leftForearm.rotation.set(0,0,0); rightForearm.rotation.set(0,0,0);
+      leftHand.rotation.set(0,0,0); rightHand.rotation.set(0,0,0);
+      head.rotation.x = 0; torso.rotation.x = 0;
+
 
       if (gesture.current === 'sit') {
-        const sitProgress = Math.min(1, (performance.now() - gestureAt.current) / 720);
+        const sitProgress = Math.min(1, (performance.now() - gestureAt.current) / 860);
         const sitEase = sitProgress * sitProgress * (3 - 2 * sitProgress);
-        avatar.position.y = 0.2 * sitEase;
-        leftLeg.rotation.x = -0.95 * sitEase;
-        rightLeg.rotation.x = -0.95 * sitEase;
-        leftArm.rotation.x = -0.18 * sitEase;
-        rightArm.rotation.x = -0.18 * sitEase;
-        head.rotation.x = 0.08 * sitEase;
+        avatar.position.y = 0.06 * sitEase;
+        torso.rotation.x = -0.045 * sitEase;
+        leftLeg.rotation.x = -1.18 * sitEase;
+        rightLeg.rotation.x = -1.18 * sitEase;
+        leftArm.rotation.x = -0.08 * sitEase;
+        rightArm.rotation.x = -0.08 * sitEase;
+        leftForearm.rotation.x = -0.22 * sitEase;
+        rightForearm.rotation.x = -0.22 * sitEase;
+        head.rotation.x = 0.07 * sitEase;
+      } else if (gesture.current === 'dip') {
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 980);
+        const reach = Math.sin(t * Math.PI);
+        rightArm.rotation.x = 0.9 * reach;
+        rightArm.rotation.z = -0.68 * reach;
+        rightForearm.rotation.x = 0.55 * reach;
+        rightHand.rotation.z = -0.18 * reach;
+        head.rotation.x = 0.12 * reach;
+        if (t >= 1) gesture.current = 'idle';
       } else if (gesture.current === 'rosary') {
-        leftArm.rotation.x = -0.92; rightArm.rotation.x = -0.92;
-        leftArm.rotation.z = 0.18; rightArm.rotation.z = -0.18;
-        head.rotation.x = 0.12; rosary.visible = true;
-        rosary.rotation.z = Math.sin(clock.elapsedTime*1.4)*0.035;
-        rosaryBeadMaterial.emissiveIntensity = 0.12 + Math.sin(clock.elapsedTime*2.2)*0.05;
-      } else if (gesture.current !== 'idle') {
-        const duration = gesture.current === 'dip' ? 950 : gesture.current === 'cross' ? 1350 :
-          gesture.current === 'prayer' ? 2300 : gesture.current === 'bow' ? 1100 : 1550;
-        const progress = Math.min(1,(performance.now()-gestureAt.current)/duration);
-        const pulse = Math.sin(progress*Math.PI);
-        if (gesture.current === 'dip') {
-          leftArm.rotation.x = -1.2*pulse; leftArm.rotation.z = 0.58*pulse;
-          head.rotation.x = 0.08*pulse;
-        } else if (gesture.current === 'cross') {
-          leftArm.rotation.x = -0.95*pulse-0.18; rightArm.rotation.x = -0.95*pulse-0.18;
-          leftArm.rotation.z = 0.38*pulse; rightArm.rotation.z = -0.38*pulse;
-        } else if (gesture.current === 'prayer') {
-          leftArm.rotation.x = -0.86*pulse-0.22; rightArm.rotation.x = -0.86*pulse-0.22;
-          leftArm.rotation.z = 0.2*pulse; rightArm.rotation.z = -0.2*pulse;
-          head.rotation.x = 0.22*pulse;
-        } else if (gesture.current === 'bow') {
-          head.rotation.x = 0.42*pulse; avatar.position.y = -0.035*pulse;
-          leftArm.rotation.x = -0.12*pulse; rightArm.rotation.x = -0.12*pulse;
-        } else if (gesture.current === 'greet') {
-          rightArm.rotation.x = -1.0*pulse;
-          rightArm.rotation.z = -0.4*pulse + Math.sin(progress*Math.PI*8)*0.15*pulse;
-          leftArm.rotation.x = -0.08*pulse;
+        leftArm.rotation.x = 0.82; rightArm.rotation.x = 0.82;
+        leftArm.rotation.z = 0.58; rightArm.rotation.z = -0.58;
+        leftForearm.rotation.x = 1.18; rightForearm.rotation.x = 1.18;
+        leftForearm.rotation.z = -0.13; rightForearm.rotation.z = 0.13;
+        leftHand.rotation.z = -0.12; rightHand.rotation.z = 0.12;
+        head.rotation.x = 0.13;
+        rosary.visible = true;
+        rosary.rotation.z = Math.sin(clock.elapsedTime * 1.15) * 0.018;
+        rosary.rotation.y = Math.sin(clock.elapsedTime * 0.8) * 0.025;
+        rosaryBeadMaterial.emissiveIntensity = 0.07 + Math.sin(clock.elapsedTime * 2.0) * 0.025;
+      } else if (gesture.current === 'cross') {
+        // Western Catholic gesture order: forehead -> chest -> left shoulder -> right shoulder.
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 2350);
+        const keyframes = [
+          { t: 0.00, x: 0.12, z: -0.02, elbow: 0.0 },
+          { t: 0.15, x: 0.46, z: -0.80, elbow: 0.18 },
+          { t: 0.37, x: 0.96, z: -0.34, elbow: 0.72 },
+          { t: 0.63, x: 0.78, z: -1.02, elbow: 0.34 },
+          { t: 0.85, x: 0.78, z: 0.02, elbow: 0.34 },
+          { t: 1.00, x: 0.00, z: 0.00, elbow: 0.00 },
+        ];
+        let a = keyframes[0], b = keyframes[keyframes.length - 1];
+        for (let i = 0; i < keyframes.length - 1; i += 1) {
+          if (t >= keyframes[i].t && t <= keyframes[i + 1].t) {
+            a = keyframes[i]; b = keyframes[i + 1]; break;
+          }
         }
-        if (progress >= 1) {
-          gesture.current = 'idle'; avatar.position.y = 0; rosary.visible = false;
-        }
+        const u = THREE.MathUtils.clamp((t - a.t) / Math.max(0.001, b.t - a.t), 0, 1);
+        const eased = u * u * (3 - 2 * u);
+        rightArm.rotation.x = THREE.MathUtils.lerp(a.x, b.x, eased);
+        rightArm.rotation.z = THREE.MathUtils.lerp(a.z, b.z, eased);
+        rightForearm.rotation.x = THREE.MathUtils.lerp(a.elbow, b.elbow, eased);
+        rightHand.rotation.x = -0.08;
+        leftArm.rotation.x = 0.04;
+        leftForearm.rotation.x = 0.04;
+        head.rotation.x = t < 0.98 ? 0.035 : 0;
+        if (t >= 1) gesture.current = 'idle';
+      } else if (gesture.current === 'prayer') {
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 3100);
+        const approach = Math.min(1, t / 0.26);
+        const release = t > 0.78 ? (t - 0.78) / 0.22 : 0;
+        const ease = approach * approach * (3 - 2 * approach);
+        const hold = ease * (1 - release * release);
+        const breath = Math.sin(clock.elapsedTime * 1.35) * 0.018 * hold;
+        leftArm.rotation.x = 0.78 * hold + breath;
+        rightArm.rotation.x = 0.78 * hold + breath;
+        leftArm.rotation.z = 0.6 * hold;
+        rightArm.rotation.z = -0.6 * hold;
+        leftForearm.rotation.x = 1.22 * hold;
+        rightForearm.rotation.x = 1.22 * hold;
+        leftForearm.rotation.z = -0.13 * hold;
+        rightForearm.rotation.z = 0.13 * hold;
+        leftHand.rotation.z = -0.12 * hold;
+        rightHand.rotation.z = 0.12 * hold;
+        head.rotation.x = 0.18 * hold;
+        torso.rotation.x = -0.025 * hold + breath;
+        if (t >= 1) gesture.current = 'idle';
+      } else if (gesture.current === 'bow') {
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 1500);
+        const pulse = Math.sin(t * Math.PI);
+        head.rotation.x = 0.38 * pulse;
+        torso.rotation.x = 0.16 * pulse;
+        avatar.position.y = -0.025 * pulse;
+        leftArm.rotation.x = -0.08 * pulse;
+        rightArm.rotation.x = -0.08 * pulse;
+        if (t >= 1) gesture.current = 'idle';
+      } else if (gesture.current === 'greet') {
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 1850);
+        const raise = Math.min(1, t / 0.24);
+        const lower = t > 0.82 ? (t - 0.82) / 0.18 : 0;
+        const amplitude = Math.min(1, raise) * (1 - lower);
+        rightArm.rotation.z = 0.92 * amplitude;
+        rightArm.rotation.x = 0.28 * amplitude;
+        rightForearm.rotation.x = 0.82 * amplitude;
+        rightHand.rotation.z = Math.sin(clock.elapsedTime * 9) * 0.22 * amplitude;
+        if (t >= 1) gesture.current = 'idle';
       } else if (!isSitting) {
-        avatar.position.y = 0; rosary.visible = false;
+        avatar.position.y = 0;
+        rosary.visible = false;
       }
+
 
       const followHeight = 2.15 + pitch * 2.6;
       cameraTarget.set(
