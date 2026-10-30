@@ -10,7 +10,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
 const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || 'https://upload.wikimedia.org/wikipedia/commons/9/96/Veni.sancte.spiritus.ogg';
+const ambientMusicUrl = 'https://upload.wikimedia.org/wikipedia/commons/f/f2/Wholesome_by_Kevin_MacLeod.ogg';
 const gardenAudioUrl = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Gentle_breeze_and_birds_singing.ogg';
+type ImmersiveAudioMode = 'off' | 'chant' | 'ambient';
 const chapelPhotoUrl = 'https://images.unsplash.com/photo-1759432916468-d44411b5a661?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=2400';
 
 export default function ChapelExperience() {
@@ -22,7 +24,9 @@ export default function ChapelExperience() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.35);
+  const [volume, setVolume] = useState(0.28);
+  const [immersiveAudioMode, setImmersiveAudioMode] = useState<ImmersiveAudioMode>('off');
+  const [audioNotice, setAudioNotice] = useState('');
   const space = 'chapel' as const;
   const [immersive, setImmersive] = useState(false);
   const [baptismalName, setBaptismalName] = useState('');
@@ -133,6 +137,35 @@ export default function ChapelExperience() {
     else { try { await audio.play(); setIsPlaying(true); } catch { setNotice('음원을 재생할 수 없어요. 음원 주소를 확인해 주세요.'); } }
   };
 
+  const selectImmersiveAudio = async (mode: ImmersiveAudioMode) => {
+    const audio = audioRef.current;
+    setAudioNotice('');
+    if (mode === 'off') {
+      audio?.pause();
+      setImmersiveAudioMode('off');
+      setIsPlaying(false);
+      return;
+    }
+    if (!audio) {
+      setAudioNotice('오디오 장치를 준비하지 못했습니다.');
+      return;
+    }
+    const nextSource = mode === 'chant' ? audioUrl : ambientMusicUrl;
+    audio.pause();
+    audio.src = nextSource;
+    audio.volume = volume;
+    audio.load();
+    try {
+      await audio.play();
+      setImmersiveAudioMode(mode);
+      setIsPlaying(true);
+    } catch {
+      setImmersiveAudioMode('off');
+      setIsPlaying(false);
+      setAudioNotice('음원을 불러오지 못했습니다. 잠시 후 다시 선택해 주세요.');
+    }
+  };
+
   const enterImmersive = () => {
     const randomBaptismalNames = [
       '요셉', '마리아', '베드로', '바오로', '요한', '안나',
@@ -168,9 +201,38 @@ export default function ChapelExperience() {
       <main className="immersive-room immersive-chapel">
         <header className="immersive-toolbar">
           <div className="immersive-player" aria-label={`${baptismalName} avatar`}><span className="immersive-avatar-mark">{baptismalName.trim().slice(0, 1)}</span></div>
+          <div className="immersive-audio-dock" role="group" aria-label="배경음과 성가 선택">
+            <label className="immersive-audio-select">
+              <span>음향</span>
+              <select
+                value={immersiveAudioMode}
+                onChange={event => { void selectImmersiveAudio(event.target.value as ImmersiveAudioMode); }}
+                aria-label="배경음악 및 성가 선택"
+              >
+                <option value="off">소리 끄기</option>
+                <option value="ambient">잔잔한 배경음악</option>
+                <option value="chant">그레고리오 성가</option>
+              </select>
+            </label>
+            <label className="immersive-volume" aria-label="음량">
+              <span>VOL</span>
+              <input type="range" min="0" max="1" step="0.01" value={volume} onChange={event => setVolume(Number(event.target.value))} />
+            </label>
+            {audioNotice ? <span className="immersive-audio-notice" role="status">{audioNotice}</span> : null}
+          </div>
           <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
         </header>
         <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene displayName={baptismalName.trim()} /></section>
+        <audio
+          ref={audioRef}
+          src={immersiveAudioMode === 'ambient' ? ambientMusicUrl : audioUrl}
+          loop
+          preload="none"
+          onEnded={() => setIsPlaying(false)}
+          onPause={() => setIsPlaying(false)}
+          onPlay={() => setIsPlaying(true)}
+          onError={() => { if (immersiveAudioMode !== 'off') { setImmersiveAudioMode('off'); setIsPlaying(false); setAudioNotice('선택한 음원을 불러오지 못했습니다.'); } }}
+        />
       </main>
     );
   }
