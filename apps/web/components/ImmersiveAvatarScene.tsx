@@ -137,6 +137,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const darkStone = makeMat('#53564e', 0.91, 0, makeNoiseTexture('#53564e', 18, 3, 2));
     const floorStone = makeMat('#ffffff', 0.88, 0, marbleFloorPhoto);
     marbleFloorPhoto.wrapS = marbleFloorPhoto.wrapT = THREE.ClampToEdgeWrapping;
+    marbleFloorPhoto.center.set(0.5, 0.5);
+    marbleFloorPhoto.rotation = Math.PI / 2;
     marbleFloorPhoto.repeat.set(1, 1);
     const aisleStone = makeMat('#a28a67', 0.78, 0, makeNoiseTexture('#a28a67', 8, 2, 12));
     const trim = makeMat('#b49a6b', 0.42, 0.42);
