@@ -8,7 +8,7 @@ type Blocker = { x: number; z: number; rx: number; rz: number };
 
 export default function ImmersiveAvatarScene({ displayName }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const gesture = useRef<'idle' | 'dip' | 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | 'sit'>('idle');
+  const gesture = useRef<'idle' | 'dip' | 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | 'sit' | 'stand' | 'kneel'>('idle');
   const gestureAt = useRef(0);
   const [nearFont, setNearFont] = useState(false);
   const [step, setStep] = useState<'water' | 'cross' | 'done'>('water');
@@ -779,7 +779,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     });
     const rosaryCordMaterial = makeMat('#6d5a42', 0.85, 0);
     const ringPoints: THREE.Vector3[] = [];
-    const ringCount = 50;
+    const ringCount = 55;
     for (let i = 0; i <= ringCount; i += 1) {
       const angle = (Math.PI * 2 * i) / ringCount;
       ringPoints.push(new THREE.Vector3(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0));
@@ -790,10 +790,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       const angle = (Math.PI * 2 * i) / ringCount;
       const bead = new THREE.Mesh(
         new THREE.SphereGeometry(0.026, 10, 8),
-        i % 10 === 0 ? rosaryLargeBeadMaterial : rosaryBeadMaterial,
+        i % 11 === 0 ? rosaryLargeBeadMaterial : rosaryBeadMaterial,
       );
       bead.position.set(Math.cos(angle) * 0.235, Math.sin(angle) * 0.155 + 0.015, 0);
-      bead.scale.setScalar(i % 10 === 0 ? 1.38 : 1);
+      bead.scale.setScalar(i % 11 === 0 ? 1.38 : 1);
       rosary.add(bead);
     }
     for (let i = 0; i < 3; i += 1) {
@@ -843,7 +843,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     let pinchDistance = 0, joystickX = 0, joystickY = 0;
     let movementTarget: THREE.Vector3 | null = null;
     let pendingSeat: number | null = null, currentSeat: number | null = null;
-    let pendingAction: 'prayer' | null = null;
+    let pendingAction: 'prayer' | 'kneel' | null = null;
     let isSitting = false, frame = 0;
     let lastNearFont = false, lastNearMary = false;
     const clock = new THREE.Clock();
@@ -857,10 +857,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (currentSeat !== null) occupiedSeats.delete(currentSeat);
       currentSeat = null;
       isSitting = false;
-      avatar.position.y = 0;
-      if (gesture.current === 'sit') gesture.current = 'idle';
-      leftLeg.rotation.x = 0;
-      rightLeg.rotation.x = 0;
+      gesture.current = 'stand';
+      gestureAt.current = performance.now();
       rosary.visible = false;
     };
     const setWalkTarget = (clientX: number, clientY: number) => {
@@ -937,7 +935,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
       if (action === 'mary') {
         if (isSitting) standUp();
-        pendingSeat = null; pendingAction = 'prayer';
+        pendingSeat = null; pendingAction = 'kneel';
         movementTarget = new THREE.Vector3(13.15,0,49.5);
         gesture.current = 'idle'; rosary.visible = false;
         setActionNotice('정원에 있는 성모 마리아 기도처로 이동합니다.');
@@ -952,7 +950,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           movementTarget = null; pendingSeat = null; pendingAction = null;
           gesture.current = 'rosary'; gestureAt.current = performance.now();
           rosary.visible = true;
-          setActionNotice('묵주를 손에 들고 기도합니다. 다시 누르면 마칩니다.');
+          setActionNotice('50개의 작은 묵주알과 다섯 개의 큰 묵주알을 따라 기도합니다. 다시 누르면 마칩니다.');
         }
         return;
       }
@@ -1042,13 +1040,14 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
             const index = pendingSeat, seat = seatSpots[index];
             occupiedSeats.add(index); currentSeat = index; pendingSeat = null;
             avatar.position.set(seat.x,0,seat.z);
-            avatar.rotation.y = 0; isSitting = true;
+            avatar.rotation.y = 0; yaw = 0; isSitting = true;
             gesture.current = 'sit'; gestureAt.current = performance.now();
-            setActionNotice('비어 있던 자리에 앉았습니다. 이동하면 다시 일어납니다.');
+            setActionNotice('가까운 빈자리에 앉았습니다. 이동하면 천천히 일어납니다.');
           } else if (pendingAction === 'prayer') {
-            pendingAction = null; avatar.rotation.y = -Math.PI/2;
-            gesture.current = 'prayer'; gestureAt.current = performance.now();
-            setActionNotice('성모님 앞에서 두 손을 모아 기도합니다.');
+            pendingAction = null; avatar.rotation.y = Math.PI/2;
+            yaw = Math.PI/2;
+            gesture.current = pendingAction === 'kneel' ? 'kneel' : 'prayer'; gestureAt.current = performance.now();
+            setActionNotice('성모님 앞에 무릎을 꿇고 기도합니다.');
           }
         }
       }
@@ -1092,6 +1091,37 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightHand.rotation.z = -0.18 * reach;
         head.rotation.x = 0.12 * reach;
         if (t >= 1) gesture.current = 'idle';
+      } else if (gesture.current === 'stand') {
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 640);
+        const ease = t * t * (3 - 2 * t);
+        const remain = 1 - ease;
+        avatar.position.y = 0.06 * remain;
+        torso.rotation.x = -0.045 * remain;
+        leftLeg.rotation.x = -1.18 * remain;
+        rightLeg.rotation.x = -1.18 * remain;
+        leftArm.rotation.x = -0.08 * remain;
+        rightArm.rotation.x = -0.08 * remain;
+        leftForearm.rotation.x = -0.22 * remain;
+        rightForearm.rotation.x = -0.22 * remain;
+        if (t >= 1) gesture.current = 'idle';
+      } else if (gesture.current === 'kneel') {
+        const t = Math.min(1, (performance.now() - gestureAt.current) / 780);
+        const ease = t * t * (3 - 2 * t);
+        avatar.position.y = -0.22 * ease;
+        torso.rotation.x = -0.035 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
+        leftLeg.rotation.x = 1.05 * ease;
+        rightLeg.rotation.x = 1.05 * ease;
+        leftArm.rotation.x = 0.78 * ease;
+        rightArm.rotation.x = 0.78 * ease;
+        leftArm.rotation.z = 0.6 * ease;
+        rightArm.rotation.z = -0.6 * ease;
+        leftForearm.rotation.x = 1.22 * ease;
+        rightForearm.rotation.x = 1.22 * ease;
+        leftForearm.rotation.z = -0.13 * ease;
+        rightForearm.rotation.z = 0.13 * ease;
+        leftHand.rotation.z = -0.12 * ease;
+        rightHand.rotation.z = 0.12 * ease;
+        head.rotation.x = 0.18 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
       } else if (gesture.current === 'rosary') {
         leftArm.rotation.x = 0.82; rightArm.rotation.x = 0.82;
         leftArm.rotation.z = 0.58; rightArm.rotation.z = -0.58;
@@ -1169,7 +1199,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightForearm.rotation.x = 0.82 * amplitude;
         rightHand.rotation.z = Math.sin(clock.elapsedTime * 9) * 0.22 * amplitude;
         if (t >= 1) gesture.current = 'idle';
-      } else if (!isSitting) {
+      } else if (gesture.current === 'idle' && !isSitting) {
         avatar.position.y = 0;
         rosary.visible = false;
       }
