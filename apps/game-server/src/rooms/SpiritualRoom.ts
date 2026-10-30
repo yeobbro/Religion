@@ -15,6 +15,8 @@ type Visitor = {
 
 const CAPACITY: Record<Space, number> = { chapel: 32, garden: 40 };
 const PRAYER_CLEARANCE = 1.25;
+const MAX_ROOMS: Record<Space, number> = { chapel: 50, garden: 50 };
+const activeRooms: Record<Space, number> = { chapel: 0, garden: 0 };
 const MOVE_SPEED_LIMIT = 4.5;
 const WORLD_BOUNDS: Record<Space, { minX: number; maxX: number; minZ: number; maxZ: number }> = {
   chapel: { minX: -7.2, maxX: 7.2, minZ: -14, maxZ: 8 },
@@ -44,9 +46,15 @@ export class SpiritualRoom extends Room {
   private space: Space = "chapel";
   private visitors = new Map<string, Visitor>();
   private usedSeats = new Set<number>();
+  private countedRoom = false;
 
   onCreate(options: { space?: Space }) {
     this.space = options.space === "garden" ? "garden" : "chapel";
+    if (activeRooms[this.space] >= MAX_ROOMS[this.space]) {
+      throw new Error(`Maximum ${this.space} room count reached`);
+    }
+    activeRooms[this.space] += 1;
+    this.countedRoom = true;
     this.maxClients = CAPACITY[this.space];
     this.setMetadata({ space: this.space, capacity: this.maxClients });
 
@@ -98,6 +106,13 @@ export class SpiritualRoom extends Room {
       visitor,
     });
     this.broadcast("visitors:update", this.snapshot());
+  }
+
+  onDispose() {
+    if (this.countedRoom) {
+      activeRooms[this.space] = Math.max(0, activeRooms[this.space] - 1);
+      this.countedRoom = false;
+    }
   }
 
   onLeave(client: Client) {
