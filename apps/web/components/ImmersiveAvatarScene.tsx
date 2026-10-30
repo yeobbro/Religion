@@ -28,7 +28,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     scene.background = new THREE.Color('#aebbb4');
     scene.fog = new THREE.Fog('#aebbb4', 42, 105);
 
-    const camera = new THREE.PerspectiveCamera(58, host.clientWidth / Math.max(1, host.clientHeight), 0.1, 180);
+    const camera = new THREE.PerspectiveCamera(64, host.clientWidth / Math.max(1, host.clientHeight), 0.1, 220);
     const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
     renderer.setSize(host.clientWidth, host.clientHeight);
@@ -153,8 +153,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     // Outside ground begins before the threshold and continues well into the garden.
     addGroundPlane(world, 60, 100, grassMat, 0, -0.24, 38);
-    addGroundPlane(world, 22.2, 42, floorStone, 0, -0.1, -1);
-    for (let x = -10; x <= 10; x += 2) {
+    addGroundPlane(world, 29.0, 42, floorStone, 0, -0.1, -1);
+    for (let x = -14; x <= 14; x += 2) {
       for (let z = -20; z <= 18; z += 2) {
         addMesh(world, new THREE.BoxGeometry(1.94, 0.035, 1.94), floorStone, x, -0.075, z, false, true);
       }
@@ -163,17 +163,93 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     addGroundPlane(world, 5.4, 48, pathMat, 0, -0.035, 39);
 
     // CHURCH: long nave, side aisles, side walls and vaulted ceiling.
-    addBox(world, 22.8, 0.5, 42, darkPlaster, 0, 8.35, -1);
-    addBox(world, 0.6, 8.2, 42, plaster, -11.35, 3.85, -1, true);
-    addBox(world, 0.6, 8.2, 42, plaster, 11.35, 3.85, -1, true);
-    addBox(world, 22.8, 8.2, 0.6, plaster, 0, 3.85, -22, true);
+    addBox(world, 29.0, 0.65, 42, darkPlaster, 0, 22.15, -1);
+    addBox(world, 0.8, 21.6, 42, plaster, -14.4, 10.8, -1, true);
+    addBox(world, 0.8, 21.6, 42, plaster, 14.4, 10.8, -1, true);
+    addBox(world, 29.0, 21.6, 0.8, plaster, 0, 10.8, -22, true);
     // The front wall has a real open doorway; there is no invisible wall across the threshold.
-    addBox(world, 8.1, 8.2, 0.6, plaster, -7.3, 3.85, 19.5, true);
-    addBox(world, 8.1, 8.2, 0.6, plaster, 7.3, 3.85, 19.5, true);
-    addBox(world, 6.5, 1.9, 0.6, plaster, 0, 7.15, 19.5);
+    addBox(world, 11.5, 21.6, 0.8, plaster, -8.65, 10.8, 19.5, true);
+    addBox(world, 11.5, 21.6, 0.8, plaster, 8.65, 10.8, 19.5, true);
+    addBox(world, 6.5, 3.0, 0.8, plaster, 0, 20.2, 19.5);
     for (const x of [-2.9, 2.9]) {
-      addCylinder(world, 0.42, 0.48, 7.9, ivory, x, 3.9, 19.15, 20, true);
-      addBox(world, 1.05, 0.34, 1.0, trim, x, 7.95, 19.15);
+      addCylinder(world, 0.58, 0.64, 20.8, ivory, x, 10.4, 19.15, 24, true);
+      addBox(world, 1.35, 0.42, 1.25, trim, x, 21.0, 19.15);
+    }
+
+
+    // Monumental west facade: rose window and twin towers inspired by the great French Gothic cathedrals.
+    const roseWindow = new THREE.Group();
+    roseWindow.position.set(0, 14.7, 19.04);
+    world.add(roseWindow);
+    const roseGlass = new THREE.Mesh(
+      new THREE.CircleGeometry(3.05, 64),
+      new THREE.MeshStandardMaterial({
+        color: '#8c9ec0',
+        emissive: '#455879',
+        emissiveIntensity: 0.42,
+        roughness: 0.24,
+        metalness: 0.08,
+        transparent: true,
+        opacity: 0.94,
+        side: THREE.DoubleSide,
+      })
+    );
+    roseWindow.add(roseGlass);
+    for (const radius of [1.15, 2.05, 2.9]) {
+      const traceryRing = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.085, 10, 64), trim);
+      roseWindow.add(traceryRing);
+    }
+    for (let i = 0; i < 12; i += 1) {
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.075, 5.75, 0.09), trim);
+      spoke.rotation.z = (Math.PI * 2 * i) / 12;
+      roseWindow.add(spoke);
+    }
+    const roseBoss = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 14), trim);
+    roseBoss.position.z = 0.08;
+    roseWindow.add(roseBoss);
+
+    for (const side of [-1, 1]) {
+      const towerX = side * 11.35;
+      addBox(world, 5.65, 22.0, 5.4, darkStone, towerX, 11.0, 22.5);
+      addBox(world, 5.95, 0.55, 5.7, trim, towerX, 22.0, 22.5);
+      for (const offset of [-2.45, 2.45]) {
+        addBox(world, 0.28, 22.5, 0.28, trim, towerX + offset, 11.25, 22.5);
+      }
+      const towerLouver = addMesh(
+        world,
+        new THREE.PlaneGeometry(1.85, 5.0),
+        new THREE.MeshStandardMaterial({
+          color: '#59758a',
+          emissive: '#38536b',
+          emissiveIntensity: 0.34,
+          transparent: true,
+          opacity: 0.92,
+          side: THREE.DoubleSide,
+        }),
+        towerX,
+        15.6,
+        19.76,
+        false,
+        false
+      );
+      towerLouver.rotation.y = Math.PI;
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(3.35, 12.0, 8), darkWood);
+      spire.position.set(towerX, 29.0, 22.5);
+      spire.castShadow = true;
+      world.add(spire);
+      addBox(world, 0.2, 2.8, 0.2, trim, towerX, 36.2, 22.5);
+      addBox(world, 1.45, 0.18, 0.18, trim, towerX, 36.8, 22.5);
+      addBlocker(towerX, 22.5, 2.95, 2.85);
+    }
+
+    // Flying buttresses give the outer nave the stepped silhouette of a monumental Gothic basilica.
+    for (const side of [-1, 1]) {
+      for (const z of [-14, -5, 4, 13]) {
+        addBox(world, 0.85, 18.2, 1.1, stone, side * 18.0, 9.1, z, true);
+        const diagonal = addBox(world, 0.72, 12.0, 1.0, ivory, side * 16.2, 12.3, z);
+        diagonal.rotation.z = -side * 0.26;
+        addBox(world, 2.1, 0.45, 1.65, trim, side * 18.0, 18.5, z);
+      }
     }
 
     // Open wooden entrance doors on their hinges, so the garden reads as the next space.
@@ -181,38 +257,56 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     leftDoor.position.set(-2.9, 0, 19.5);
     leftDoor.rotation.y = -0.92;
     world.add(leftDoor);
-    addBox(leftDoor, 2.75, 5.6, 0.22, wood, -1.34, 2.8, 0);
-    for (const y of [0.9, 2.8, 4.7]) addBox(leftDoor, 2.55, 0.08, 0.28, trim, -1.34, y, 0);
+    addBox(leftDoor, 2.75, 8.8, 0.22, wood, -1.34, 4.4, 0);
+    for (const y of [1.4, 4.4, 7.4]) addBox(leftDoor, 2.55, 0.1, 0.28, trim, -1.34, y, 0);
     const rightDoor = new THREE.Group();
     rightDoor.position.set(2.9, 0, 19.5);
     rightDoor.rotation.y = 0.92;
     world.add(rightDoor);
-    addBox(rightDoor, 2.75, 5.6, 0.22, wood, 1.34, 2.8, 0);
-    for (const y of [0.9, 2.8, 4.7]) addBox(rightDoor, 2.55, 0.08, 0.28, trim, 1.34, y, 0);
+    addBox(rightDoor, 2.75, 8.8, 0.22, wood, 1.34, 4.4, 0);
+    for (const y of [1.4, 4.4, 7.4]) addBox(rightDoor, 2.55, 0.1, 0.28, trim, 1.34, y, 0);
 
     // A high stone vault, rib arches and heavy piers.
-    for (const x of [-8.7, -5.8, 5.8, 8.7]) {
+    for (const x of [-11.2, -7.5, 7.5, 11.2]) {
       for (const z of [-17, -11, -5, 1, 7, 13]) {
-        addCylinder(world, 0.31, 0.4, 7.65, ivory, x, 3.8, z, 18, true);
-        addCylinder(world, 0.55, 0.55, 0.26, trim, x, 7.78, z, 18);
-        addBox(world, 0.9, 0.18, 0.9, trim, x, 7.98, z);
+        addCylinder(world, 0.38, 0.48, 20.6, ivory, x, 10.3, z, 22, true);
+        addCylinder(world, 0.68, 0.68, 0.42, trim, x, 20.85, z, 22);
+        addBox(world, 1.15, 0.24, 1.15, trim, x, 21.15, z);
       }
     }
     for (const z of [-17, -11, -5, 1, 7, 13]) {
-      for (const x of [-4.3, 0, 4.3]) {
-        const rib = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.14, 10, 48, Math.PI), ivory);
-        rib.position.set(x, 6.15, z);
-        rib.rotation.z = Math.PI;
-        rib.castShadow = true;
-        world.add(rib);
-      }
+      const pointedArch = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-6.2, 7.2, z),
+        new THREE.Vector3(-5.5, 13.4, z),
+        new THREE.Vector3(-3.7, 18.7, z),
+        new THREE.Vector3(0, 21.45, z),
+        new THREE.Vector3(3.7, 18.7, z),
+        new THREE.Vector3(5.5, 13.4, z),
+        new THREE.Vector3(6.2, 7.2, z),
+      ]);
+      const rib = new THREE.Mesh(new THREE.TubeGeometry(pointedArch, 88, 0.2, 12, false), trim);
+      rib.castShadow = true;
+      world.add(rib);
+    }
+    // Longitudinal ribs join the pointed arches into a high Gothic vault.
+    for (const x of [-5.8, 0, 5.8]) {
+      const vaultRib = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+          new THREE.Vector3(x, x === 0 ? 21.45 : 12.0, -19),
+          new THREE.Vector3(x, x === 0 ? 21.45 : 18.0, -10),
+          new THREE.Vector3(x, x === 0 ? 21.45 : 21.0, 0),
+          new THREE.Vector3(x, x === 0 ? 21.45 : 18.0, 10),
+          new THREE.Vector3(x, x === 0 ? 21.45 : 12.0, 17),
+        ]), 80, 0.16, 10, false), trim
+      );
+      world.add(vaultRib);
     }
 
     // Stained glass panels: jewel tones with lead divisions.
     const glassColors = ['#547d8e', '#bd805f', '#d5b76f', '#6e927e', '#947f9f', '#d1c18b'];
     for (const side of [-1, 1]) {
       for (const z of [-15, -8, -1, 6, 13]) {
-        const x = side * 10.98;
+        const x = side * 14.02;
         const glassMat = new THREE.MeshStandardMaterial({
           color: glassColors[(Math.abs(z) + (side > 0 ? 2 : 0)) % glassColors.length],
           roughness: 0.24,
@@ -223,10 +317,35 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           opacity: 0.86,
           side: THREE.DoubleSide,
         });
-        const panel = addMesh(world, new THREE.PlaneGeometry(1.95, 3.85), glassMat, x, 4.65, z, false, false);
+        const panel = addMesh(world, new THREE.PlaneGeometry(2.2, 4.6), glassMat, x, 5.7, z, false, false);
         panel.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        for (const dz of [-1, 0, 1]) addBox(world, 0.11, 3.95, 0.1, trim, x - side * 0.08, 4.65, z + dz * 0.9);
-        addBox(world, 0.12, 4.0, 2.1, darkWood, x - side * 0.11, 4.65, z);
+        for (const dz of [-1, 0, 1]) addBox(world, 0.11, 4.7, 0.1, trim, x - side * 0.08, 5.7, z + dz * 0.9);
+        addBox(world, 0.12, 4.0, 2.1, darkWood, x - side * 0.11, 5.7, z);
+      }
+    }
+
+
+    // Clerestory: a second, much higher band of stained glass pours colored light into the nave.
+    for (const side of [-1, 1]) {
+      for (const z of [-15, -8, -1, 6, 13]) {
+        const x = side * 14.02;
+        const color = glassColors[(Math.abs(z) + (side > 0 ? 3 : 1)) % glassColors.length];
+        const highGlass = new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.3,
+          roughness: 0.2,
+          metalness: 0.06,
+          transparent: true,
+          opacity: 0.9,
+          side: THREE.DoubleSide,
+        });
+        const clerestory = addMesh(world, new THREE.PlaneGeometry(2.15, 6.4), highGlass, x, 15.0, z, false, false);
+        clerestory.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+        for (const offset of [-1.05, 1.05]) {
+          addBox(world, 0.12, 6.55, 0.12, trim, x - side * 0.08, 15.0, z + offset);
+        }
+        addBox(world, 0.12, 0.12, 2.2, trim, x - side * 0.08, 15.0, z);
       }
     }
 
@@ -234,7 +353,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     for (const side of [-1, 1]) {
       for (let i = 0; i < 7; i += 1) {
         const z = -16 + i * 4.8;
-        const x = side * 10.72;
+        const x = side * 13.55;
         addBox(world, 0.12, 1.55, 1.18, darkWood, x, 3.05, z);
         addBox(world, 0.08, 1.3, 0.92, trim, x - side * 0.08, 3.05, z);
         addBox(world, 0.06, 1.05, 0.68, stone, x - side * 0.14, 3.05, z);
@@ -254,8 +373,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     addBox(world, 1.45, 1.25, 0.82, trim, 0, 3.95, -19.8);
     addBox(world, 1.12, 0.82, 0.62, ivory, 0, 3.95, -19.25);
     addMesh(world, new THREE.SphereGeometry(0.48, 20, 14), trim, 0, 4.72, -19.25);
-    addBox(world, 0.15, 2.45, 0.16, trim, 0, 6.5, -21.35);
-    addBox(world, 1.42, 0.18, 0.16, trim, 0, 6.9, -21.35);
+    addBox(world, 0.2, 6.8, 0.18, trim, 0, 9.0, -21.35);
+    addBox(world, 2.2, 0.22, 0.18, trim, 0, 12.2, -21.35);
     const sanctuaryLamp = new THREE.PointLight('#ff5b3d', 0.9, 5, 2);
     sanctuaryLamp.position.set(1.25, 3.4, -18.8);
     world.add(sanctuaryLamp);
@@ -303,7 +422,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     // Side confessionals, kneelers and small prayer alcoves.
     for (const side of [-1, 1]) {
-      const x = side * 8.9;
+      const x = side * 12.4;
       addBox(world, 2.3, 2.8, 1.45, darkWood, x, 1.4, 7.4, true);
       addBox(world, 1.1, 1.7, 0.08, wood, x, 1.65, 6.65);
       addBox(world, 0.72, 1.0, 0.05, trim, x, 1.65, 6.58);
@@ -485,11 +604,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     avatar.add(nameLabel);
 
     // Collision-aware movement around the architecture and garden furniture.
-    addBlocker(-11.35, -1, 0.35, 21);
-    addBlocker(11.35, -1, 0.35, 21);
-    addBlocker(0, -22, 11.4, 0.3);
-    addBlocker(-7.3, 19.5, 4.05, 0.3);
-    addBlocker(7.3, 19.5, 4.05, 0.3);
+    addBlocker(-14.4, -1, 0.4, 21);
+    addBlocker(14.4, -1, 0.4, 21);
+    addBlocker(0, -22, 14.5, 0.4);
+    addBlocker(-8.65, 19.5, 5.8, 0.4);
+    addBlocker(8.65, 19.5, 5.8, 0.4);
     for (const z of [-17, -11, -5, 1, 7, 13]) {
       for (const x of [-8.7, -5.8, 5.8, 8.7]) addBlocker(x, z, 0.35, 0.35);
     }
@@ -497,7 +616,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const keys = new Set<string>();
     let yaw = 0;
     let pitch = 0.12;
-    let cameraDistance = 5.8;
+    let cameraDistance = 6.8;
     let dragging = false;
     let mobileLooking = false;
     let lastX = 0;
