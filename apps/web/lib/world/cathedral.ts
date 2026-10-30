@@ -494,7 +494,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
         candle(bx, h + 0.025, bz, 0.24, 0.018);
       }
       block(x, z, 0.28, 0.45, true);
-      if (i % 2 === 0) {
+      if ((i === 1 && s < 0) || (i === 3 && s > 0)) {
         const l = new THREE.PointLight('#ffb763', 5.5, 7.5, 1.8);
         l.position.set(x, 2.1, z);
         l.userData.base = 5.5;
@@ -628,7 +628,10 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
       const z = -15.5 + i * 5.2;
       const n = s < 0 ? i : 13 - i;
       box('woodDark', 0.08, 1.05, 0.85, s * (W - 0.04), 2.0, z);
-      const panel = mesh(new THREE.PlaneGeometry(0.62, 0.78), mat(new THREE.MeshStandardMaterial({ map: tex(stationTexture(n)), roughness: 0.8 })), s * (W - 0.09), 2.0, z);
+      // Carved relief photographs (supplied reference), cycling through three panels.
+      const relief = tex(loader.load(image(`ref-station-${(n % 3) + 1}`).src));
+      relief.colorSpace = THREE.SRGBColorSpace;
+      const panel = mesh(new THREE.PlaneGeometry(0.5, 0.8), mat(new THREE.MeshStandardMaterial({ map: relief, roughness: 0.75, emissive: '#ffffff', emissiveMap: relief, emissiveIntensity: 0.12 })), s * (W - 0.09), 2.0, z);
       panel.rotation.y = s < 0 ? Math.PI / 2 : -Math.PI / 2;
       box('gold', 0.04, 0.18, 0.04, s * (W - 0.09), 2.65, z);
       box('gold', 0.04, 0.04, 0.12, s * (W - 0.09), 2.69, z);
@@ -732,6 +735,23 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   titianSpot.position.set(tX - 1.0, 7.5, Z_E + 5.5);
   titianSpot.target.position.set(tX, 4.0, Z_E);
   group.add(titianSpot, titianSpot.target);
+  // St Joseph and a praying angel on the west wall either side of the doors, each with candles.
+  const shrineLights: THREE.PointLight[] = [];
+  for (const [id, sx] of [['ref-joseph', -4.6], ['ref-angel', 4.6]] as const) {
+    painting(id, sx, 2.55, Z_W - 0.05, 2.7, Math.PI);
+    box('stone', 1.5, 0.95, 0.55, sx, 0.475, Z_W - 0.45, true);
+    box('linen', 1.55, 0.03, 0.6, sx, 0.965, Z_W - 0.45);
+    for (let k = 0; k < 7; k += 1) {
+      const cx = sx - 0.6 + k * 0.2, cz = Z_W - 0.45 + (k % 2 ? -0.12 : 0.1);
+      cyl('redGlass', 0.035, 0.035, 0.08, cx, 1.02, cz, 10);
+      addFlame(cx, 1.07, cz, 0.7);
+    }
+    const l = new THREE.PointLight('#ffb35c', 6, 6, 1.6);
+    l.position.set(sx, 1.6, Z_W - 1.1);
+    l.userData.base = 6;
+    group.add(l);
+    shrineLights.push(l);
+  }
   // Raphael and Murillo on the west wall of the aisles, facing the altar.
   painting('painting-raphael', -10.9, 4.9, Z_W - 0.05, 3.6, Math.PI);
   painting('painting-murillo', 10.9, 4.9, Z_W - 0.05, 3.6, Math.PI);
@@ -1104,6 +1124,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     standLight.intensity = 4 + Math.sin(time * 11) * 0.5 + slotLit.filter(Boolean).length * 0.12;
     beamMats.forEach((m, i) => { m.opacity = 0.2 + 0.13 * indoor + Math.sin(time * 0.4 + i * 1.3) * 0.05; });
     poolMats.forEach((m, i) => { m.opacity = (0.42 + Math.sin(time * 0.4 + i * 1.3) * 0.08) * indoor; });
+    shrineLights.forEach((l, i) => { l.intensity = l.userData.base * (1 + Math.sin(time * 8 + i * 3) * 0.08 + Math.sin(time * 19 + i) * 0.05); });
     candleLights.forEach((l, i) => { l.intensity = l.userData.base * (1 + Math.sin(time * 9 + i * 2.1) * 0.07 + Math.sin(time * 23 + i) * 0.05); });
     // Dust drifts upward slowly and wraps.
     const p = dust.geometry.attributes.position as THREE.BufferAttribute;

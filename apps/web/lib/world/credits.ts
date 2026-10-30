@@ -337,6 +337,11 @@ export const IMAGES: GlassImage[] = [
   {"id": "ref-w24", "title": "스테인드글라스 · 성 요셉", "src": "/textures/glass/ref-w24.jpg", "size": [203, 445], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
   {"id": "ref-w25", "title": "스테인드글라스 · 성모 승천", "src": "/textures/glass/ref-w25.jpg", "size": [213, 445], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
   {"id": "ref-w26", "title": "스테인드글라스 · 부활과 영광", "src": "/textures/glass/ref-w26.jpg", "size": [236, 445], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
+  {"id": "ref-station-1", "title": "십자가의 길 부조 1", "src": "/textures/ref/ref-station-1.jpg", "size": [156, 516], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
+  {"id": "ref-station-2", "title": "십자가의 길 부조 2", "src": "/textures/ref/ref-station-2.jpg", "size": [156, 510], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
+  {"id": "ref-station-3", "title": "십자가의 길 부조 3", "src": "/textures/ref/ref-station-3.jpg", "size": [132, 471], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
+  {"id": "ref-joseph", "title": "성 요셉상", "src": "/textures/ref/ref-joseph.jpg", "size": [396, 594], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
+  {"id": "ref-angel", "title": "기도하는 천사상", "src": "/textures/ref/ref-angel.jpg", "size": [498, 630], "author": "KREWX 제공 레퍼런스 이미지", "license": "제공자 사용 허락", "source": "/catholic"},
 ];
 
 export const TEXTURES: Credit[] = [
