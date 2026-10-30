@@ -919,7 +919,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
 
     const keys = new Set<string>();
-    let yaw = 0, pitch = -0.16, cameraDistance = 6.8;
+    let yaw = 0, pitch = -0.05, cameraDistance = 6.8;
     let pointerDown = false, pointerMoved = false, pointerTouch = false;
     let lastX = 0, lastY = 0, downX = 0, downY = 0;
     let pinchDistance = 0, joystickX = 0, joystickY = 0;
@@ -1114,6 +1114,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       pointerDown = true;
       pointerMoved = false;
       pointerTouch = event.pointerType === 'touch';
+      try { host.setPointerCapture(event.pointerId); } catch { /* Pointer capture can be unavailable on older browsers. */ }
       downX = lastX = event.clientX;
       downY = lastY = event.clientY;
     };
@@ -1488,14 +1489,14 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
 
       const focusHeight = isSitting ? 1.05 : 1.38;
-      const horizontalDistance = cameraDistance * Math.cos(pitch);
       cameraTarget.set(
-        avatar.position.x - Math.sin(yaw) * horizontalDistance,
-        focusHeight - Math.sin(pitch) * cameraDistance,
-        avatar.position.z + Math.cos(yaw) * horizontalDistance,
+        avatar.position.x - Math.sin(yaw) * cameraDistance,
+        focusHeight + 0.92 + Math.max(0, cameraDistance - 5.8) * 0.16,
+        avatar.position.z + Math.cos(yaw) * cameraDistance,
       );
       camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
-      lookTarget.set(avatar.position.x, focusHeight, avatar.position.z - 0.12);
+      // Pitch rotates the view target, not the camera below the floor.
+      lookTarget.set(avatar.position.x, focusHeight + pitch * 8.0, avatar.position.z - 0.12);
       camera.lookAt(lookTarget);
 
       const fontDistance = Math.hypot(avatar.position.x + 2.2, avatar.position.z - 12);
