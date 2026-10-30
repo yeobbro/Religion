@@ -98,6 +98,13 @@ export const TRACKS: Track[] = [
 
 /** Chanted prayers the visitor can choose to listen to on their own (not part of the live broadcast). */
 export const PRAYERS: Track[] = [
+  {"id": "ko-sign-of-cross", "title": "성호경 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-sign-of-cross.mp3", "duration": 6.2, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
+  {"id": "ko-apostles-creed", "title": "사도신경 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-apostles-creed.mp3", "duration": 48.2, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
+  {"id": "ko-our-father", "title": "주님의 기도 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-our-father.mp3", "duration": 28.4, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
+  {"id": "ko-hail-mary", "title": "성모송 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-hail-mary.mp3", "duration": 22.2, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
+  {"id": "ko-glory-be", "title": "영광송 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-glory-be.mp3", "duration": 9.2, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
+  {"id": "ko-fatima", "title": "구원의 기도 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-fatima.mp3", "duration": 12.7, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
+  {"id": "ko-salve-regina", "title": "성모 찬송 (한국어 낭독)", "composer": "한국 천주교 공용 기도문 (한국천주교주교회의)", "performer": "AI 음성 낭독 (Microsoft 신경망 음성 ko-KR-SunHi)", "src": "/audio/ko-salve-regina.mp3", "duration": 45.6, "license": "기도문 © 한국천주교주교회의 · AI 음성으로 낭독", "source": "https://cbck.or.kr"},
   {
     "id": "pater-noster",
     "title": "주님의 기도 (Pater Noster)",

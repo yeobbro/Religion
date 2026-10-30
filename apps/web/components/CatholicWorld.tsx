@@ -234,13 +234,13 @@ export default function CatholicWorld() {
       {musicOpen ? (
         <section className="music-panel" aria-label="성당 성가">
           <header>
-            <strong>{live ? '지금 성당에 흐르는 성가' : mode === 'prayer' ? '기도 노래 듣기' : '성가 골라 듣기'}</strong>
+            <strong>{live ? '지금 성당에 흐르는 성가' : mode === 'prayer' ? '기도문 듣기' : '성가 골라 듣기'}</strong>
             <button type="button" className="panel-x" onClick={() => setMusicOpen(false)} aria-label="닫기">×</button>
           </header>
           <div className="music-tabs" role="tablist">
             <button type="button" role="tab" aria-selected={live} onClick={goLive}>● LIVE 함께</button>
             <button type="button" role="tab" aria-selected={mode === 'chant'} onClick={() => choose('chant', TRACKS[track])}>성가 고르기</button>
-            <button type="button" role="tab" aria-selected={mode === 'prayer'} onClick={() => choose('prayer', PRAYERS[0])}>기도 노래</button>
+            <button type="button" role="tab" aria-selected={mode === 'prayer'} onClick={() => choose('prayer', PRAYERS[0])}>기도문 듣기</button>
           </div>
           <p className="music-now"><b>{cur.title}</b><span>{cur.composer} · {cur.performer}</span></p>
           <div className="music-progress"><i style={{ width: `${Math.min(100, (elapsed / cur.duration) * 100)}%` }} /></div>
@@ -253,7 +253,7 @@ export default function CatholicWorld() {
           <p className="music-note">{live
             ? '모든 방문자가 같은 순간의 성가를 함께 듣습니다. 정원에서는 성가가 잦아들고 바람과 새소리가 들립니다.'
             : mode === 'prayer'
-              ? '라틴어로 노래하는 기도입니다. 곡을 누르면 처음부터 나만 듣고, 끝나면 다음 기도로 이어집니다.'
+              ? '한국어 기도문(AI 음성 낭독)과 라틴어로 노래하는 기도입니다. 누르면 처음부터 나만 듣고, 끝나면 다음 기도로 이어집니다.'
               : '듣고 싶은 성가를 누르면 처음부터 나만 듣습니다. LIVE를 누르면 다시 다른 방문자와 같은 성가로 돌아갑니다.'}</p>
           <ol className="music-list">
             {(mode === 'prayer' ? PRAYERS : TRACKS).map((t, i) => {
@@ -280,7 +280,7 @@ export default function CatholicWorld() {
             <p className="credits-lead">이 공간의 사진·음원은 공개 라이선스 자료와 KREWX가 제공한 레퍼런스 이미지를 사이트에서 직접 제공합니다. 성당 건축, 조각상, 인물은 코드로 만든 창작물입니다.</p>
             <h3>성가 · 음악</h3>
             <ul>{TRACKS.map(t => <li key={t.id}><b>{t.title}</b> — {t.composer} · 연주/녹음 {t.performer} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
-            <h3>기도 노래</h3>
+            <h3>기도문 · 기도 노래</h3>
             <ul>{PRAYERS.map(t => <li key={t.id}><b>{t.title}</b> — {t.composer} · 연주/녹음 {t.performer} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
             <h3>환경음</h3>
             <ul>{AMBIENCE.map(t => <li key={t.id}><b>{t.title}</b> — {t.author} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>

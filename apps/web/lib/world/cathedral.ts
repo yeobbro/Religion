@@ -20,6 +20,7 @@ import { createCrucifix, createMarianStatue, disposeGroup } from './statues';
 export type Blocker = { x: number; z: number; rx: number; rz: number; low?: boolean };
 export type Spot = { x: number; z: number; yaw: number };
 export type Seat = { x: number; z: number; aisleX: number };
+export type BenchSeat = { x: number; z: number; yaw: number; front: { x: number; z: number } };
 
 export type CandleStand = {
   approach: Spot;
@@ -45,6 +46,9 @@ export type Site = {
   seats: Seat[];
   fonts: { x: number; z: number }[];
   candleStand: CandleStand;
+  /** Every votive stand: [0] Our Lady inside, [1] the garden grotto. */
+  candleStands: CandleStand[];
+  benchSeats: BenchSeat[];
   confessional: Confessional;
   maryInside: Spot;
   grotto: Spot;
@@ -762,54 +766,54 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     group.add(l, l.target);
   }
 
-  // ---------- Votive candle stand (in front of Our Lady) ----------
-  const standX = -8.85, standZ = maryZ + 1.3;
-  const slots: THREE.Vector3[] = [];
-  const slotLit: boolean[] = [];
-  const slotFlames: (THREE.Sprite | null)[] = [];
-  box('iron', 2.0, 0.05, 0.75, standX, 0.85, standZ);
-  for (const [dx, dz] of [[-0.95, -0.33], [0.95, -0.33], [-0.95, 0.33], [0.95, 0.33]]) cyl('iron', 0.02, 0.02, 0.85, standX + dx, 0.425, standZ + dz, 6);
-  const tiers = [{ y: 0.88, z: 0.22 }, { y: 1.02, z: 0.0 }, { y: 1.16, z: -0.22 }];
-  tiers.forEach((t, ti) => {
-    box('iron', 1.95, 0.03, 0.2, standX, t.y, standZ + t.z);
-    for (let k = 0; k < 10; k += 1) {
-      const x = standX - 0.86 + k * 0.19;
-      const z = standZ + t.z;
-      mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.085, 14, 1, true), M.redGlass, x, t.y + 0.058, z);
-      cyl('wax', 0.03, 0.03, 0.035, x, t.y + 0.033, z, 10);
-      slots.push(V(x, t.y + 0.055, z));
-      slotLit.push(false);
-      slotFlames.push(null);
-      void ti;
-    }
-  });
-  box('woodDark', 0.28, 0.3, 0.2, standX + 1.25, 0.15 + 0.85, standZ + 0.1);
-  const standLight = new THREE.PointLight('#ffb866', 4, 6, 2);
-  standLight.position.set(standX, 1.6, standZ + 0.3);
-  group.add(standLight);
-  block(standX, standZ, 1.05, 0.42, true);
-  const lightSlot = (i: number) => {
-    if (slotLit[i]) return;
-    slotLit[i] = true;
-    slotFlames[i] = addFlame(slots[i].x, slots[i].y + 0.01, slots[i].z, 0.85);
+  // ---------- Votive candle stands (Our Lady inside, and the garden grotto) ----------
+  const votiveStand = (standX: number, standZ: number, preLit: number[], lightPower = 4): CandleStand & { flicker: (t: number) => void } => {
+    const slots: THREE.Vector3[] = [];
+    const slotLit: boolean[] = [];
+    box('iron', 2.0, 0.05, 0.75, standX, 0.85, standZ);
+    for (const [dx, dz] of [[-0.95, -0.33], [0.95, -0.33], [-0.95, 0.33], [0.95, 0.33]]) cyl('iron', 0.02, 0.02, 0.85, standX + dx, 0.425, standZ + dz, 6);
+    const tiers = [{ y: 0.88, z: 0.22 }, { y: 1.02, z: 0.0 }, { y: 1.16, z: -0.22 }];
+    tiers.forEach(t => {
+      box('iron', 1.95, 0.03, 0.2, standX, t.y, standZ + t.z);
+      for (let k = 0; k < 10; k += 1) {
+        const x = standX - 0.86 + k * 0.19;
+        const z = standZ + t.z;
+        mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.085, 14, 1, true), M.redGlass, x, t.y + 0.058, z);
+        cyl('wax', 0.03, 0.03, 0.035, x, t.y + 0.033, z, 10);
+        slots.push(V(x, t.y + 0.055, z));
+        slotLit.push(false);
+      }
+    });
+    box('woodDark', 0.28, 0.3, 0.2, standX + 1.25, 0.15 + 0.85, standZ + 0.1);
+    const light = new THREE.PointLight('#ffb866', lightPower, 6, 2);
+    light.position.set(standX, 1.6, standZ + 0.3);
+    group.add(light);
+    block(standX, standZ, 1.05, 0.42, true);
+    const lightSlot = (i: number) => {
+      if (slotLit[i]) return;
+      slotLit[i] = true;
+      addFlame(slots[i].x, slots[i].y + 0.01, slots[i].z, 0.85);
+    };
+    preLit.forEach(lightSlot);
+    return {
+      approach: { x: standX, z: standZ + 0.95, yaw: 0 },
+      slots,
+      isLit: i => slotLit[i],
+      freeSlot: near => {
+        let best = -1, bd = Infinity;
+        slots.forEach((p, i) => {
+          if (slotLit[i]) return;
+          const d = p.distanceTo(near) + (p.y - 0.88) * 0.8;
+          if (d < bd) { bd = d; best = i; }
+        });
+        return best;
+      },
+      light: lightSlot,
+      flicker: t => { light.intensity = lightPower + Math.sin(t * 11 + standX) * 0.5 + slotLit.filter(Boolean).length * 0.12; },
+    };
   };
   // Candles already burning from earlier visitors.
-  [1, 4, 6, 8, 11, 13, 17, 20, 22, 25, 27].forEach(lightSlot);
-  const candleStand: CandleStand = {
-    approach: { x: standX, z: standZ + 0.95, yaw: 0 },
-    slots,
-    isLit: i => slotLit[i],
-    freeSlot: near => {
-      let best = -1, bd = Infinity;
-      slots.forEach((p, i) => {
-        if (slotLit[i]) return;
-        const d = p.distanceTo(near) + (p.y - 0.88) * 0.8;
-        if (d < bd) { bd = d; best = i; }
-      });
-      return best;
-    },
-    light: lightSlot,
-  };
+  const candleStand = votiveStand(-8.85, maryZ + 1.3, [1, 4, 6, 8, 11, 13, 17, 20, 22, 25, 27]);
 
   // ---------- Confessional (south aisle) ----------
   const cfX = W - 0.75, cfZ = -1.0;
@@ -1021,10 +1025,20 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     block(x, z, 0.2, 0.2, true);
   };
   for (const z of [FZ + 12, FZ + 24, FZ + 35]) for (const s of [-1, 1]) lamp(s * 2.4, z);
+  // Garden benches; each has two places to sit, facing the way the bench faces (ry, like a yaw).
+  const benchSeats: BenchSeat[] = [];
   const bench = (x: number, z: number, ry: number) => {
+    const sn = Math.sin(ry), cs = Math.cos(ry);
     box('wood', 2.0, 0.07, 0.5, x, 0.46, z, false, ry);
-    box('wood', 2.0, 0.45, 0.06, x + (ry ? 0.24 * Math.sign(Math.sin(ry)) : 0), 0.75, z + (ry ? 0 : 0.24), false, ry);
-    block(x, z, ry ? 0.3 : 1.0, ry ? 1.0 : 0.3, true);
+    box('wood', 2.0, 0.45, 0.06, x + 0.24 * sn, 0.75, z + 0.24 * cs, false, ry);
+    for (const dx of [-0.75, 0.75]) box('iron', 0.06, 0.44, 0.46, x + dx * cs, 0.22, z - dx * sn, false, ry);
+    const across = Math.abs(cs) > 0.5;
+    block(x, z, across ? 1.0 : 0.3, across ? 0.3 : 1.0, true);
+    for (const off of [-0.5, 0.5]) {
+      const sx = x + off * cs, sz = z - off * sn;
+      // Stand in front of the seat (forward is (-sin, -cos) of the yaw), then sit back onto it.
+      benchSeats.push({ x: sx, z: sz, yaw: ry, front: { x: sx - sn * 0.75, z: sz - cs * 0.75 } });
+    }
   };
   bench(-7.5, FZ + 10, 0);
   bench(7.5, FZ + 10, 0);
@@ -1080,6 +1094,12 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   grottoLabel.scale.set(1.8, 0.45, 1);
   grottoLabel.position.set(gX - 1.0, 5.4, gZ);
   group.add(grottoLabel);
+  // A votive stand beside the grotto so candles can be offered to Our Lady outdoors too.
+  const grottoStand = votiveStand(gX - 2.2, gZ + 2.7, [2, 5, 9, 12, 18, 23], 5);
+  const candleStands = [candleStand, grottoStand];
+  // Benches facing the grotto, for sitting with Our Lady in the garden.
+  bench(gX - 5.0, gZ - 2.0, -Math.PI / 2);
+  bench(gX - 5.0, gZ + 2.0, -Math.PI / 2);
 
   // Sky dome with a low sun glow, and a ring of distant hills.
   // Photographed sky (Poly Haven HDRI, tonemapped, CC0) on an equirectangular dome.
@@ -1121,7 +1141,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
       if (f.h) f.h.material.opacity = 0.5;
     }
     haloMat.opacity = 0.45 + Math.sin(time * 7) * 0.05;
-    standLight.intensity = 4 + Math.sin(time * 11) * 0.5 + slotLit.filter(Boolean).length * 0.12;
+    candleStands.forEach(c => c.flicker(time));
     beamMats.forEach((m, i) => { m.opacity = 0.2 + 0.13 * indoor + Math.sin(time * 0.4 + i * 1.3) * 0.05; });
     poolMats.forEach((m, i) => { m.opacity = (0.42 + Math.sin(time * 0.4 + i * 1.3) * 0.08) * indoor; });
     shrineLights.forEach((l, i) => { l.intensity = l.userData.base * (1 + Math.sin(time * 8 + i * 3) * 0.08 + Math.sin(time * 19 + i) * 0.05); });
@@ -1174,6 +1194,8 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     seats,
     fonts,
     candleStand,
+    candleStands,
+    benchSeats,
     confessional,
     maryInside: maryKneel,
     grotto: { x: gX - 2.3, z: gZ, yaw: -Math.PI / 2 }, // facing +X (the statue)

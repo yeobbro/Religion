@@ -12,6 +12,17 @@ type Props = {
  * Rosary panel: scroll the mouse wheel (or swipe) over the beads to pass them one at a time,
  * or jump a whole decade with the buttons. The avatar's thumb moves to the next bead in step.
  */
+/** Recorded prayers (AI voice) for each kind of bead. */
+const clipsFor = (prayer: string): string[] => {
+  if (prayer.startsWith('성호경')) return ['ko-sign-of-cross', 'ko-apostles-creed'];
+  if (prayer.startsWith('주님의 기도')) return ['ko-our-father'];
+  if (prayer.startsWith('성모송')) return ['ko-hail-mary'];
+  if (prayer.startsWith('영광송 · 구원의 기도')) return ['ko-glory-be', 'ko-fatima'];
+  if (prayer.startsWith('영광송')) return ['ko-glory-be'];
+  if (prayer.startsWith('성모 찬송')) return ['ko-salve-regina'];
+  return [];
+};
+
 export default function RosaryPanel({ onStep, onClose }: Props) {
   const [set, setSet] = useState<MysterySet>(() => mysteryForDay(new Date().getDay()));
   const [step, setStep] = useState(0);
@@ -35,6 +46,39 @@ export default function RosaryPanel({ onStep, onClose }: Props) {
   };
   const goRef = useRef(go);
   goRef.current = go;
+
+  // Prayer voice: reads each prayer aloud (AI voice) and, when it finishes, moves to the next bead.
+  const [voice, setVoice] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => {
+    if (!voice) return;
+    const clips = clipsFor(steps[step].prayer);
+    if (!clips.length) return;
+    let cancelled = false;
+    let timer = 0;
+    const audio = new Audio();
+    audio.volume = 0.9;
+    let i = 0;
+    const next = () => {
+      if (cancelled) return;
+      if (i >= clips.length) {
+        setSpeaking(false);
+        if (step < steps.length - 1) timer = window.setTimeout(() => goRef.current(step + 1), 700);
+        return;
+      }
+      audio.src = `/audio/${clips[i++]}.mp3`;
+      audio.play().then(() => setSpeaking(true)).catch(() => setSpeaking(false));
+    };
+    audio.addEventListener('ended', next);
+    next();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      audio.pause();
+      audio.removeEventListener('ended', next);
+      setSpeaking(false);
+    };
+  }, [voice, step, steps]);
 
   // Wheel needs a non-passive listener to keep the page (and the camera zoom) still.
   useEffect(() => {
@@ -160,13 +204,16 @@ export default function RosaryPanel({ onStep, onClose }: Props) {
         <strong>{cur.prayer}</strong>
         {cur.detail ? <span>{cur.detail}</span> : null}
       </div>
+      <button type="button" className={`rosary-voice${voice ? ' on' : ''}`} aria-pressed={voice} onClick={() => setVoice(v => !v)}>
+        {voice ? (speaking ? '🔊 기도문을 함께 읽는 중 · 끄기' : '🔊 기도 소리 켜짐 · 끄기') : '🔈 기도문 소리로 함께 바치기'}
+      </button>
       <div className="rosary-controls">
         <button type="button" onClick={() => jumpDecade(-1)}>⏮ 이전 단</button>
         <button type="button" onClick={() => go(step - 1)} aria-label="이전 알">▲</button>
         <button type="button" onClick={() => go(step + 1)} aria-label="다음 알">▼</button>
         <button type="button" onClick={() => jumpDecade(1)}>다음 단 ⏭</button>
       </div>
-      <p className="rosary-hint">묵주 위에서 마우스 휠을 굴리면 한 알씩, 버튼으로 한 단씩 넘어갑니다.</p>
+      <p className="rosary-hint">{voice ? '기도문 소리가 끝나면 다음 알로 저절로 넘어갑니다.' : '묵주 위에서 마우스 휠을 굴리면 한 알씩, 버튼으로 한 단씩 넘어갑니다.'}</p>
     </aside>
   );
 }

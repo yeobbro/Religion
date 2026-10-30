@@ -30,6 +30,7 @@ type Api = {
   setVisitor: (v: Visitor) => void;
   rosaryStep: (label: string) => void;
   say: (text: string) => void;
+  sitBench: (i: number) => void;
   dip: () => void;
   lightCandle: (intention: string) => void;
   finishConfession: () => void;
@@ -155,6 +156,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
   const apiRef = useRef<Api | null>(null);
   const [notice, setNotice] = useState('바닥을 클릭하거나 WASD·조이스틱으로 이동하고, 아래 동작을 선택하세요.');
   const [nearFont, setNearFont] = useState(false);
+  const [nearBench, setNearBench] = useState(-1);
   const [fontStep, setFontStep] = useState<'water' | 'cross' | 'done'>('water');
   const [joystick, setJoystick] = useState({ x: 0, y: 0 });
   const [state, setState] = useState({ veil: false, sitting: false, praying: false, rosary: false });
@@ -258,10 +260,35 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     }
     rays.visible = false;
     scene.add(rays);
+    // A radiant cross that flashes where the prayer reaches heaven.
+    const crossTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      const ctx = c.getContext('2d')!;
+      const glow = ctx.createRadialGradient(128, 118, 4, 128, 118, 128);
+      glow.addColorStop(0, 'rgba(255,248,220,0.95)');
+      glow.addColorStop(0.35, 'rgba(255,214,140,0.35)');
+      glow.addColorStop(1, 'rgba(255,200,120,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.shadowColor = '#fff3c8';
+      ctx.shadowBlur = 26;
+      ctx.fillStyle = '#fffaf0';
+      ctx.fillRect(116, 30, 24, 196);  // upright
+      ctx.fillRect(66, 82, 124, 24);   // crossbeam
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
+    const crossMat = new THREE.SpriteMaterial({ map: crossTex, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, opacity: 0, toneMapped: false });
+    const crossSprite = new THREE.Sprite(crossMat);
+    crossSprite.visible = false;
+    crossSprite.renderOrder = 20;
+    scene.add(crossSprite);
     let asc = -1;
     let ascPath: THREE.CatmullRomCurve3 | null = null;
     const ascFrom = new THREE.Vector3();
-    const ASC_GATHER = 1.8, ASC_RISE = 6.2, ASC_BURST = 3.2;
+    const ASC_GATHER = 1.8, ASC_RISE = 6.2, ASC_BURST = 4.2;
     const startAscension = () => {
       avatar.chest.updateMatrixWorld(true);
       avatar.chest.localToWorld(ascFrom.set(0, 0.0, -0.35));
@@ -314,7 +341,13 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       moteMat.opacity = Math.min(1, asc * 1.2) * (1 - burst) * 0.9;
       // At the top of the vault heaven opens: rays and a wide halo of light.
       rays.visible = burst > 0;
+      // The orb opens into a shining cross: a quick bright flash, then a slow, gentle fade.
+      crossSprite.visible = burst > 0;
       if (burst > 0) {
+        const flash = burst < 0.12 ? burst / 0.12 : Math.max(0, 1 - (burst - 0.12) / 0.6);
+        crossSprite.position.copy(p);
+        crossSprite.scale.setScalar(3.2 + burst * 4.5);
+        crossMat.opacity = Math.min(1, flash * 1.15);
         rays.position.copy(p);
         rays.lookAt(camera.position);
         rays.rotation.z += dt * 0.25;
@@ -327,7 +360,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       }
       if (asc > total) {
         asc = -1;
-        orb.visible = halo.visible = motes.visible = rays.visible = false;
+        orb.visible = halo.visible = motes.visible = rays.visible = crossSprite.visible = false;
         orbLight.intensity = 0;
         say('당신의 기도가 빛이 되어 주님께 올라갔습니다. 평화를 빕니다.');
       }
@@ -361,6 +394,25 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     let seated: { index: number; aisle: THREE.Vector3 } | null = null;
     let confessing = false;
     let lastNearFont = false;
+    let lastNearBench = -1;
+    let standIdx = 0;
+    /** Walk to the front of a garden bench seat, turn, and sit back onto it. */
+    const sitOnBench = (i: number) => {
+      const b = site.benchSeats[i];
+      if (!b) return;
+      const front = new THREE.Vector3(b.front.x, 0, b.front.z);
+      getUp();
+      avatar.setHands('rest');
+      goTo(front.x, front.z, () => {
+        faceYaw(b.yaw);
+        glide([{ x: b.x, z: b.z, yaw: b.yaw, dur: 0.8 }], () => {
+          seated = { index: -1 - i, aisle: front };
+          avatar.setPosture('sit', 0.5);
+          say('정원 벤치에 앉았습니다. 바람과 새소리를 들으며 쉬어 가세요.');
+          sync();
+        });
+      }, '가까운 벤치로 갑니다.');
+    };
 
     const say = (s: string) => setNotice(s);
     const sync = () => setState({ veil: avatar.veilOn, sitting: avatar.posture === 'sit', praying: avatar.hands === 'prayer', rosary: avatar.hands === 'rosary' });
@@ -381,10 +433,11 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         onArrive: name => toastRef.current(`${name}님이 성당에 들어오셨어요`, 'in'),
         onDepart: name => toastRef.current(`${name}님이 평화 속에 떠나셨어요`, 'out'),
         onAlreadyHere: names => toastRef.current(names.length === 1 ? `${names[0]}님이 함께 머물고 계세요` : `${names.slice(0, 2).join('·')}님${names.length > 2 ? ` 외 ${names.length - 2}명` : ''}이 함께 머물고 계세요`, 'in'),
-        onCandle: slot => {
-          if (slot < 0 || slot >= site.candleStand.slots.length || site.candleStand.isLit(slot)) return;
-          site.candleStand.light(slot);
-          sparkle(site.candleStand.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0)));
+        onCandle: (si, slot) => {
+          const st = site.candleStands[si];
+          if (!st || slot < 0 || slot >= st.slots.length || st.isLit(slot)) return;
+          st.light(slot);
+          sparkle(st.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0)));
         },
       }).then(pr => {
         if (disposed || ticket !== joining) { pr.leave(); return; }
@@ -498,6 +551,16 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         if (seated) { getUp(() => say('자리에서 일어났습니다.')); say('자리에서 일어납니다.'); return; }
         const used = new Set<number>();
         const pos = avatar.root.position;
+        // In the garden, sit on the nearest garden bench instead of walking back to the pews.
+        if (site.indoorAt(pos.x, pos.z) < 0.5) {
+          const b = site.benchSeats
+            .map((bs, i) => ({ bs, i, d: Math.hypot(bs.x - pos.x, bs.z - pos.z) }))
+            .sort((p, q) => p.d - q.d)[0];
+          if (b) {
+            sitOnBench(b.i);
+            return;
+          }
+        }
         const best = site.seats
           .map((s, i) => ({ s, i, d: Math.hypot(s.x - pos.x, s.z - pos.z) }))
           .filter(o => !used.has(o.i))
@@ -534,11 +597,15 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         return;
       }
       if (a === 'candle') {
-        const go = () => goTo(site.candleStand.approach.x, site.candleStand.approach.z, () => {
-          faceYaw(site.candleStand.approach.yaw);
+        // Inside: Our Lady's side altar. In the garden: the grotto's votive stand.
+        const pos = avatar.root.position;
+        standIdx = site.indoorAt(pos.x, pos.z) > 0.5 ? 0 : 1;
+        const st = site.candleStands[standIdx];
+        const go = () => goTo(st.approach.x, st.approach.z, () => {
+          faceYaw(st.approach.yaw);
           setCandlePicker(true);
-          say('어떤 마음으로 초를 봉헌할까요?');
-        }, '성모 제대 앞 봉헌초대로 갑니다.');
+          say(standIdx === 0 ? '어떤 마음으로 초를 봉헌할까요?' : '성모 동굴 앞입니다. 어떤 마음으로 초를 봉헌할까요?');
+        }, standIdx === 0 ? '성모 제대 앞 봉헌초대로 갑니다.' : '정원의 성모 동굴 봉헌초대로 갑니다.');
         avatar.setHands('rest');
         if (!getUp(go)) go();
         return;
@@ -563,12 +630,13 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     };
     const lightCandle = (intention: string) => {
       setCandlePicker(false);
-      const slot = site.candleStand.freeSlot(avatar.root.position.clone().add(new THREE.Vector3(0, 1, -0.8)));
+      const stand = site.candleStands[standIdx];
+      const slot = stand.freeSlot(avatar.root.position.clone().add(new THREE.Vector3(0, 1, -0.8)));
       if (slot < 0) { say('모든 자리에 초가 밝혀져 있어요. 잠시 기도하며 머물러 주세요.'); return; }
-      const wick = site.candleStand.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0));
+      const wick = stand.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0));
       avatar.play('light', {
         target: wick,
-        onCue: () => { site.candleStand.light(slot); presence?.sendCandle(slot); sparkle(wick); say(`초가 밝혀졌습니다 · ${intention}`); },
+        onCue: () => { stand.light(slot); presence?.sendCandle(standIdx, slot); sparkle(wick); say(`초가 밝혀졌습니다 · ${intention}`); },
         onDone: () => { avatar.play('amen', { onDone: () => say(`${intention} 봉헌한 초가 성모님 앞에서 타오르고 있습니다.`) }); },
       });
       say('불붙이개로 초에 불을 옮깁니다…');
@@ -602,7 +670,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       myBubbleT = 4;
       presence?.sendSay(text);
     };
-    apiRef.current = { act, setVisitor, rosaryStep, say: sayPhrase, dip, lightCandle, finishConfession, leaveConfession };
+    apiRef.current = { act, sitBench: (i: number) => sitOnBench(i), setVisitor, rosaryStep, say: sayPhrase, dip, lightCandle, finishConfession, leaveConfession };
     // Development-only hook for automated visual checks (teleport and camera placement).
     if (process.env.NODE_ENV !== 'production') {
       (window as unknown as { __religion?: unknown }).__religion = {
@@ -611,6 +679,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         view: (vy: number, vp: number, vd: number) => { yaw = vy; pitch = vp; dist = vd; },
         get avatar() { return avatar; },
         get orb() { return { visible: orb.visible, pos: orb.position.toArray(), opacity: orbMat.opacity, scale: orb.scale.x, asc }; },
+        ascendStart: () => startAscension(),
         ascend: (sec: number) => { for (let t = 0; t < sec; t += 1 / 30) updateAscension(1 / 30, t); },
         cam: (x: number, y: number, z: number, lx: number, ly: number, lz: number) => { camOverride = x === undefined ? null : [new THREE.Vector3(x, y, z), new THREE.Vector3(lx, ly, lz)]; },
         npcs,
@@ -802,6 +871,13 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       // Holy water fonts.
       const nearF = site.fonts.some(f => Math.hypot(f.x - pos.x, f.z - pos.z) < 1.35);
       if (nearF !== lastNearFont) { lastNearFont = nearF; setNearFont(nearF); }
+      // Garden benches: offer a sit button when standing close by.
+      let nb = -1;
+      if (!seated && avatar.posture === 'stand' && !route.length && !glides.length) {
+        let bd = 2.2;
+        site.benchSeats.forEach((b, i) => { const d = Math.hypot(b.x - pos.x, b.z - pos.z); if (d < bd) { bd = d; nb = i; } });
+      }
+      if (nb !== lastNearBench) { lastNearBench = nb; setNearBench(nb); }
 
       // Indoor / outdoor light blend.
       indoor += (site.indoorAt(pos.x, pos.z) - indoor) * Math.min(1, dt * 2);
@@ -908,6 +984,8 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       npcs.dispose();
       avatar.dispose();
       orbTex.dispose();
+      crossTex.dispose();
+      crossMat.dispose();
       orbMat.dispose();
       (halo.material as THREE.Material).dispose();
       moteGeo.dispose();
@@ -967,6 +1045,13 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
             ? <button type="button" className="holy-water-primary" onClick={() => { apiRef.current?.dip(); setFontStep('cross'); }}>성수 찍기</button>
             : <button type="button" className="holy-water-primary" onClick={() => { act('cross'); setFontStep('done'); }}>성호 긋기</button>}
           <button type="button" className="holy-water-skip" onClick={() => setFontStep('done')}>건너뛰기</button>
+        </div>
+      ) : null}
+
+      {entered && nearBench >= 0 && confession === 'off' ? (
+        <div className="holy-water-actions bench-prompt" role="group" aria-label="벤치">
+          <span aria-hidden="true">🪑</span>
+          <button type="button" className="holy-water-primary" onClick={() => apiRef.current?.sitBench(nearBench)}>벤치에 앉기 <kbd>Space</kbd></button>
         </div>
       ) : null}
 

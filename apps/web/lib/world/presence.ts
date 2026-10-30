@@ -21,7 +21,7 @@ type Wire =
   | { t: 'hi'; name: string; outfit: Outfit }
   | { t: 's'; x: number; z: number; y: number; p: Posture; h: HandsMode; v: 0 | 1 }
   | { t: 'g'; g: Gesture }
-  | { t: 'c'; slot: number }
+  | { t: 'c'; slot: number; st?: number }
   | { t: 'say'; text: string };
 
 type Peer = {
@@ -46,7 +46,7 @@ export type Presence = {
   count: () => number;
   sendState: (s: SelfState) => void;
   sendGesture: (g: Gesture) => void;
-  sendCandle: (slot: number) => void;
+  sendCandle: (stand: number, slot: number) => void;
   sendSay: (text: string) => void;
   setProfile: (p: Profile) => void;
   update: (dt: number) => void;
@@ -94,7 +94,7 @@ export async function joinServer(
   server: number,
   profile: Profile,
   scene: THREE.Scene,
-  hooks: { onCount: (n: number) => void; onCandle: (slot: number) => void; onError?: (msg: string) => void; onArrive?: (name: string, outfit: Outfit) => void; onDepart?: (name: string) => void; onAlreadyHere?: (names: string[]) => void },
+  hooks: { onCount: (n: number) => void; onCandle: (stand: number, slot: number) => void; onError?: (msg: string) => void; onArrive?: (name: string, outfit: Outfit) => void; onDepart?: (name: string) => void; onAlreadyHere?: (names: string[]) => void },
 ): Promise<Presence> {
   const { joinRoom, getRelaySockets } = await import('trystero');
   if (process.env.NODE_ENV !== 'production') (window as unknown as { __socks?: () => unknown }).__socks = () => Object.fromEntries(Object.entries(getRelaySockets() as Record<string, WebSocket>).map(([k, v]) => [k, v.readyState]));
@@ -188,7 +188,7 @@ export async function joinServer(
     } else if (m.t === 'g') {
       if (p.avatar && m.g !== 'light') p.avatar.play(m.g);
     } else if (m.t === 'c') {
-      if (Number.isInteger(m.slot)) hooks.onCandle(m.slot);
+      if (Number.isInteger(m.slot)) hooks.onCandle(Number.isInteger(m.st) ? m.st! : 0, m.slot);
     } else if (m.t === 'say') {
       if (p.avatar && PHRASES.includes(m.text)) { p.bubble = showBubble(p.avatar.root, m.text, p.bubble); p.bubbleT = 4; }
     }
@@ -212,7 +212,7 @@ export async function joinServer(
       }
     },
     sendGesture: g => { void chan.send({ t: 'g', g }).catch(() => undefined); },
-    sendCandle: slot => { void chan.send({ t: 'c', slot }).catch(() => undefined); },
+    sendCandle: (st, slot) => { void chan.send({ t: 'c', slot, st }).catch(() => undefined); },
     sendSay: text => { void chan.send({ t: 'say', text }).catch(() => undefined); },
     update: dt => {
       const now = performance.now();

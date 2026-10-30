@@ -663,3 +663,19 @@
   .presence-toasts{top:54px}
   .presence-toast{font-size:11px;padding:7px 12px}
 }
+
+/* Notices live at the top centre so the action bar never covers them. */
+.world-action-notice{left:50%!important;right:auto!important;top:62px;bottom:auto!important;transform:translateX(-50%);max-width:min(560px,calc(100vw - 28px))!important;text-align:center!important;font-size:11.5px;border-radius:999px!important;z-index:24}
+.world-action-notice.dim{opacity:0}
+.presence-toasts{top:104px}
+.holy-water-actions{bottom:136px!important;z-index:18}
+.holy-water-actions kbd{margin-left:6px;padding:0 5px;border:1px solid #0003;border-radius:4px;font:inherit;font-size:9px;opacity:.7}
+@media(max-width:760px),(pointer:coarse){
+  .world-action-notice{top:52px;font-size:10px!important;padding:7px 12px!important;width:calc(100vw - 24px);box-sizing:border-box}
+  .presence-toasts{top:92px}
+  .holy-water-actions{bottom:66px!important}
+  .holy-water-actions kbd{display:none}
+}
+@media(max-width:760px),(pointer:coarse){.rosary-panel{top:92px!important}}
+.rosary-voice{border:1px solid #e9c77d88;border-radius:999px;background:#e9c77d14;color:#ffe7b0;font-size:11px;font-weight:600;padding:8px 10px;cursor:pointer}
+.rosary-voice.on{background:#e9d6ad;color:#2b2416;border-color:#e9d6ad}
