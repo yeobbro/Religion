@@ -982,6 +982,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           setActionNotice('묵주기도를 마쳤습니다.');
         } else {
           if (isSitting) standUp();
+          if (gesture.current === 'kneel') {
+            avatar.position.y = 0;
+            leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
+            leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
+          }
           movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
           gesture.current = 'rosary'; gestureAt.current = performance.now();
           rosary.visible = true;
@@ -995,6 +1000,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         return;
       }
       if (isSitting) standUp();
+      if (gesture.current === 'kneel') {
+        avatar.position.y = 0;
+        leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
+        leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
+      }
       movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
       rosary.visible = false;
       if (['cross','prayer','bow','greet'].includes(action)) {
