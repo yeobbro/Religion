@@ -230,7 +230,7 @@ export default function ChapelExperience() {
           </div>
           <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
         </header>
-        <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene visitor={{ name: baptismalName.trim() || "순례자", outfit: "casual" }} /></section>
+        <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene visitor={{ name: baptismalName.trim() || "순례자", outfit: "casual", server: 1 }} /></section>
         <audio
           ref={audioRef}
           loop

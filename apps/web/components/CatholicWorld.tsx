@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import ImmersiveAvatarScene, { type Visitor } from './ImmersiveAvatarScene';
+import ImmersiveAvatarScene, { type PresenceInfo, type Visitor } from './ImmersiveAvatarScene';
+import { SERVERS } from '@/lib/world/presence';
 import { VISITOR_OUTFITS, type Outfit } from '@/lib/world/avatar';
 import { AMBIENCE, IMAGES, TEXTURES, TRACKS } from '@/lib/world/credits';
 
@@ -51,7 +52,28 @@ export default function CatholicWorld() {
   const [volume, setVolume] = useState(0.55);
   const [muted, setMuted] = useState(false);
   const [placeholder, setPlaceholder] = useState('프란치스코');
-  useEffect(() => { setPlaceholder(randomName()); }, []);
+  const [server, setServer] = useState(1);
+  const [presence, setPresence] = useState<PresenceInfo | null>(null);
+  const [serverOpen, setServerOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    setPlaceholder(randomName());
+    // A shared link like /catholic?server=2 brings friends to the same server.
+    const q = Number(new URLSearchParams(window.location.search).get('server'));
+    if (SERVERS.includes(q as (typeof SERVERS)[number])) setServer(q);
+  }, []);
+  const moveServer = (n: number) => {
+    setServer(n);
+    setServerOpen(false);
+    setVisitor(v => (v ? { ...v, server: n } : v));
+    const url = new URL(window.location.href);
+    url.searchParams.set('server', String(n));
+    window.history.replaceState(null, '', url);
+  };
+  const copyInvite = async () => {
+    const url = `${window.location.origin}/catholic?server=${server}`;
+    try { await navigator.clipboard.writeText(url); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { window.prompt('이 링크를 복사해 보내 주세요', url); }
+  };
 
   const music = useRef<HTMLAudioElement | null>(null);
   const garden = useRef<HTMLAudioElement | null>(null);
@@ -112,7 +134,10 @@ export default function CatholicWorld() {
   const enter = (e?: FormEvent) => {
     e?.preventDefault();
     const n = name.trim().slice(0, 16) || randomName();
-    setVisitor({ name: n, outfit });
+    setVisitor({ name: n, outfit, server });
+    const url = new URL(window.location.href);
+    url.searchParams.set('server', String(server));
+    window.history.replaceState(null, '', url);
     applyVolumes();
     void syncLive();
     garden.current?.play().catch(() => undefined);
@@ -130,14 +155,38 @@ export default function CatholicWorld() {
 
   return (
     <main className="catholic-world">
-      <ImmersiveAvatarScene visitor={visitor} onIndoor={onIndoor} onReady={() => setReady(true)} />
+      <ImmersiveAvatarScene visitor={visitor} onIndoor={onIndoor} onReady={() => setReady(true)} onPresence={setPresence} />
 
       <div className="world-topleft">
         <button type="button" className="world-chip" onClick={() => setCredits(true)} aria-haspopup="dialog">ⓘ 출처</button>
+        {visitor ? (
+          <button type="button" className={`world-chip people ${presence?.status ?? ''}`} onClick={() => setServerOpen(o => !o)} aria-expanded={serverOpen}>
+            👥 {server}서버 · {presence?.status === 'connecting' ? '연결 중…' : `${presence?.count ?? 1}명 함께`}
+          </button>
+        ) : null}
         <button type="button" className={`world-chip music ${playing ? 'on' : ''}`} onClick={() => setMusicOpen(o => !o)} aria-expanded={musicOpen}>
           <span className="live-dot" aria-hidden="true" />{playing ? 'LIVE' : '성가'} · <span className="chip-title">{cur.title}</span>
         </button>
       </div>
+
+      {serverOpen && visitor ? (
+        <section className="server-panel" aria-label="서버">
+          <header>
+            <strong>함께 머무는 서버</strong>
+            <button type="button" className="panel-x" onClick={() => setServerOpen(false)} aria-label="닫기">×</button>
+          </header>
+          <p className="server-note">같은 서버에 들어온 사람끼리 서로의 모습이 보이고, 함께 켠 초도 같이 밝혀집니다. 친구와 같은 서버 번호로 들어오세요.</p>
+          <div className="server-list">
+            {SERVERS.map(n => (
+              <button key={n} type="button" aria-pressed={n === server} onClick={() => moveServer(n)}>
+                {n}서버{n === server && presence ? <small>{presence.status === 'connecting' ? '연결 중' : `${presence.count}명`}</small> : null}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="server-invite" onClick={copyInvite}>{copied ? '링크를 복사했어요' : `🔗 ${server}서버 초대 링크 복사`}</button>
+          {presence?.status === 'offline' ? <p className="server-note">지금은 다른 방문자와 연결하지 못했어요. 잠시 후 서버를 다시 선택해 보세요.</p> : null}
+        </section>
+      ) : null}
 
       {musicOpen ? (
         <section className="music-panel" aria-label="성당 성가">
@@ -198,6 +247,15 @@ export default function CatholicWorld() {
                   <i style={{ background: `linear-gradient(135deg, ${OUTFIT_SWATCH[o.id][0]} 55%, ${OUTFIT_SWATCH[o.id][1]} 55%)` }} aria-hidden="true" />
                   <b>{o.label}</b>
                   <small>{o.hint}</small>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="entry-servers">
+              <legend>서버 <small>같은 서버에 들어온 사람들과 함께 머물러요</small></legend>
+              {SERVERS.map(n => (
+                <label key={n} className={server === n ? 'on' : ''}>
+                  <input type="radio" name="server" value={n} checked={server === n} onChange={() => setServer(n)} />
+                  {n}서버
                 </label>
               ))}
             </fieldset>

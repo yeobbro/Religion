@@ -7,8 +7,10 @@ import { buildSite, type Blocker, type Site } from '@/lib/world/cathedral';
 import { createNpcs } from '@/lib/world/npcs';
 import { beamTexture, glowTexture } from '@/lib/world/textures';
 import RosaryPanel from './RosaryPanel';
+import { PHRASES, joinServer, showBubble, type Presence } from '@/lib/world/presence';
 
-export type Visitor = { name: string; outfit: Outfit };
+export type Visitor = { name: string; outfit: Outfit; server: number };
+export type PresenceInfo = { server: number; count: number; status: 'connecting' | 'online' | 'offline' };
 type Props = {
   /** Null until the visitor enters; the world renders behind the entry screen meanwhile. */
   visitor: Visitor | null;
@@ -16,6 +18,8 @@ type Props = {
   onIndoor?: (v: number) => void;
   /** Called once the first frame has rendered. */
   onReady?: () => void;
+  /** How many real visitors share your server. */
+  onPresence?: (p: PresenceInfo) => void;
 };
 
 type Action =
@@ -25,6 +29,7 @@ type Api = {
   act: (a: Action) => void;
   setVisitor: (v: Visitor) => void;
   rosaryStep: (label: string) => void;
+  say: (text: string) => void;
   dip: () => void;
   lightCandle: (intention: string) => void;
   finishConfession: () => void;
@@ -142,7 +147,7 @@ const findPath = (blockers: Blocker[], bounds: Site['bounds'], sx: number, sz: n
   return out;
 };
 
-export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Props) {
+export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPresence }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<Api | null>(null);
   const [notice, setNotice] = useState('바닥을 클릭하거나 WASD·조이스틱으로 이동하고, 아래 동작을 선택하세요.');
@@ -156,10 +161,13 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
   const [releasedText, setReleasedText] = useState('');
   const [loading, setLoading] = useState(true);
   const [rosaryOpen, setRosaryOpen] = useState(false);
+  const [phrasesOpen, setPhrasesOpen] = useState(false);
   const [entered, setEntered] = useState(false);
   const [outfit, setOutfit] = useState<Outfit>('casual');
   const onIndoorRef = useRef(onIndoor);
   onIndoorRef.current = onIndoor;
+  const onPresenceRef = useRef(onPresence);
+  onPresenceRef.current = onPresence;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
@@ -343,12 +351,47 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
 
     const say = (s: string) => setNotice(s);
     const sync = () => setState({ veil: avatar.veilOn, sitting: avatar.posture === 'sit', praying: avatar.hands === 'prayer', rosary: avatar.hands === 'rosary' });
+    // ----- Shared presence (other visitors on the same server) -----
+    let presence: Presence | null = null;
+    let joining = 0;
+    let myBubble: THREE.Sprite | null = null;
+    let myBubbleT = 0;
+    let disposed = false;
+    const connect = (v: Visitor) => {
+      if (presence?.server === v.server) { presence.setProfile({ name: v.name, outfit: v.outfit }); return; }
+      presence?.leave();
+      presence = null;
+      const ticket = ++joining;
+      onPresenceRef.current?.({ server: v.server, count: 1, status: 'connecting' });
+      joinServer(v.server, { name: v.name, outfit: v.outfit }, scene, {
+        onCount: n => onPresenceRef.current?.({ server: v.server, count: n, status: 'online' }),
+        onCandle: slot => {
+          if (slot < 0 || slot >= site.candleStand.slots.length || site.candleStand.isLit(slot)) return;
+          site.candleStand.light(slot);
+          sparkle(site.candleStand.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0)));
+        },
+      }).then(pr => {
+        if (disposed || ticket !== joining) { pr.leave(); return; }
+        presence = pr;
+        onPresenceRef.current?.({ server: v.server, count: pr.count(), status: 'online' });
+      }).catch(() => {
+        if (ticket === joining) onPresenceRef.current?.({ server: v.server, count: 1, status: 'offline' });
+      });
+    };
+    let current: Visitor | null = null;
     const setVisitor = (v: Visitor) => {
+      const rebuild = !current || current.name !== v.name || current.outfit !== v.outfit;
+      current = v;
+      connect(v);
+      if (!rebuild) return;
       const old = avatar;
       const next = new Avatar({ name: v.name, outfit: v.outfit });
       next.root.position.copy(old.root.position);
       next.root.rotation.y = old.root.rotation.y;
       next.setPosture(old.posture, 0.48);
+      // Gestures are mirrored to everyone on the server (candle lighting is sent as its own event).
+      const play = next.play.bind(next);
+      next.play = (g, opts) => { if (g !== 'light') presence?.sendGesture(g); return play(g, opts); };
       scene.remove(old.root);
       old.dispose();
       scene.add(next.root);
@@ -509,7 +552,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
       const wick = site.candleStand.slots[slot].clone().add(new THREE.Vector3(0, 0.03, 0));
       avatar.play('light', {
         target: wick,
-        onCue: () => { site.candleStand.light(slot); sparkle(wick); say(`초가 밝혀졌습니다 · ${intention}`); },
+        onCue: () => { site.candleStand.light(slot); presence?.sendCandle(slot); sparkle(wick); say(`초가 밝혀졌습니다 · ${intention}`); },
         onDone: () => { avatar.play('amen', { onDone: () => say(`${intention} 봉헌한 초가 성모님 앞에서 타오르고 있습니다.`) }); },
       });
       say('불붙이개로 초에 불을 옮깁니다…');
@@ -538,7 +581,12 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
     const dip = () => {
       avatar.play('dip', { onDone: () => say('성수를 찍었습니다. 이어서 성호를 그어 보세요.') });
     };
-    apiRef.current = { act, setVisitor, rosaryStep, dip, lightCandle, finishConfession, leaveConfession };
+    const sayPhrase = (text: string) => {
+      myBubble = showBubble(avatar.root, text, myBubble);
+      myBubbleT = 4;
+      presence?.sendSay(text);
+    };
+    apiRef.current = { act, setVisitor, rosaryStep, say: sayPhrase, dip, lightCandle, finishConfession, leaveConfession };
     // Development-only hook for automated visual checks (teleport and camera placement).
     if (process.env.NODE_ENV !== 'production') {
       (window as unknown as { __religion?: unknown }).__religion = {
@@ -724,6 +772,15 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
 
       avatar.update(dt, moving, speed);
       npcs.update(dt, time);
+      if (presence) {
+        presence.update(dt);
+        presence.sendState({ x: pos.x, z: pos.z, yaw: avatar.root.rotation.y, posture: avatar.posture, hands: avatar.hands, veil: avatar.veilOn });
+      }
+      if (myBubble) {
+        myBubbleT -= dt;
+        (myBubble.material as THREE.SpriteMaterial).opacity = Math.min(1, myBubbleT * 2);
+        if (myBubbleT <= 0) { avatar.root.remove(myBubble); (myBubble.material as THREE.SpriteMaterial).map?.dispose(); myBubble.material.dispose(); myBubble = null; }
+      }
       updateAscension(dt, time);
 
       // Holy water fonts.
@@ -829,6 +886,8 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
       host.removeEventListener('touchstart', onTouchStart);
       host.removeEventListener('touchmove', onTouchMove);
       host.removeEventListener('touchend', onTouchEnd);
+      disposed = true;
+      presence?.leave();
       site.dispose();
       npcs.dispose();
       avatar.dispose();
@@ -848,7 +907,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
     };
   }, []);
 
-  const visitorKey = visitor ? `${visitor.name}|${visitor.outfit}` : '';
+  const visitorKey = visitor ? `${visitor.name}|${visitor.outfit}|${visitor.server}` : '';
   useEffect(() => {
     if (visitor && !loading) apiRef.current?.setVisitor(visitor);
     // Rebuild only when the name or outfit actually changes.
@@ -935,6 +994,11 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
       ) : null}
 
       {entered ? <div className="world-action-notice" role="status">{notice}</div> : null}
+      {entered && phrasesOpen && confession === 'off' ? (
+        <div className="phrase-menu" role="menu" aria-label="함께 있는 사람에게 건네는 말">
+          {PHRASES.map(t => <button key={t} type="button" role="menuitem" onClick={() => { apiRef.current?.say(t); setPhrasesOpen(false); }}>{t}</button>)}
+        </div>
+      ) : null}
       <div className="world-action-bar" role="group" aria-label="동작" hidden={confession !== 'off' || !entered}>
         <button type="button" onClick={() => act('cross')}>✝ 성호 긋기</button>
         <button type="button" aria-pressed={state.praying} onClick={() => act('prayer')}>🙏 {state.praying ? '기도 마치기' : '기도하기'}</button>
@@ -944,6 +1008,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
           : null}
         <button type="button" onClick={() => act('bow')}>목례</button>
         <button type="button" onClick={() => act('greet')}>인사</button>
+        <button type="button" aria-expanded={phrasesOpen} onClick={() => setPhrasesOpen(o => !o)}>💬 한마디</button>
         <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 {state.sitting ? '일어나기' : '앉기'} <kbd>Space</kbd></button>
         <button type="button" onClick={() => act('candle')}>🕯 초 봉헌</button>
         <button type="button" onClick={() => act('confess')}>고해소</button>
