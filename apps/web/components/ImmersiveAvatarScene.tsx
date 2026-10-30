@@ -868,6 +868,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     let lastX = 0, lastY = 0, downX = 0, downY = 0;
     let pinchDistance = 0, joystickX = 0, joystickY = 0;
     let movementTarget: THREE.Vector3 | null = null;
+    let movementPath: THREE.Vector3[] = [];
     let pendingSeat: number | null = null, currentSeat: number | null = null;
     let pendingAction: 'prayer' | 'kneel' | null = null;
     let isSitting = false, frame = 0;
@@ -896,6 +897,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       raycaster.setFromCamera(ndc, camera);
       const point = raycaster.ray.intersectPlane(walkPlane, new THREE.Vector3());
       if (!point) return;
+      movementPath = [];
       movementTarget = new THREE.Vector3(
         THREE.MathUtils.clamp(point.x, worldBounds.minX, worldBounds.maxX), 0,
         THREE.MathUtils.clamp(point.z, worldBounds.minZ, worldBounds.maxZ));
@@ -943,7 +945,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       joystickY = THREE.MathUtils.clamp(detail?.y ?? 0, -1, 1);
       if (Math.abs(joystickX) + Math.abs(joystickY) > 0.08) {
         if (isSitting) standUp();
-        movementTarget = null; pendingSeat = null; pendingAction = null;
+        movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
       }
     };
     const onWorldAction = (event: Event) => {
@@ -955,7 +957,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         if (!free.length) { setActionNotice('비어 있는 자리가 없습니다.'); return; }
         pendingSeat = free[0].index;
         pendingAction = null;
-        movementTarget = free[0].position.clone();
+        movementPath = []; movementTarget = free[0].position.clone();
         gesture.current = 'idle'; rosary.visible = false;
         setActionNotice('가장 가까운 빈자리를 찾아 이동합니다.');
         return;
@@ -964,6 +966,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const wasSitting = isSitting;
         if (wasSitting) standUp();
         pendingSeat = null; pendingAction = 'kneel';
+        movementPath = [
+          new THREE.Vector3(0, 0, 54),
+          new THREE.Vector3(13.15, 0, 54),
+        ];
         movementTarget = new THREE.Vector3(13.15,0,49.5);
         if (!wasSitting) gesture.current = 'idle';
         rosary.visible = false;
@@ -976,7 +982,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           setActionNotice('묵주기도를 마쳤습니다.');
         } else {
           if (isSitting) standUp();
-          movementTarget = null; pendingSeat = null; pendingAction = null;
+          movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
           gesture.current = 'rosary'; gestureAt.current = performance.now();
           rosary.visible = true;
           setActionNotice('50개의 작은 묵주알과 다섯 개의 큰 묵주알을 따라 기도합니다. 다시 누르면 마칩니다.');
@@ -989,7 +995,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         return;
       }
       if (isSitting) standUp();
-      movementTarget = null; pendingSeat = null; pendingAction = null;
+      movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
       rosary.visible = false;
       if (['cross','prayer','bow','greet'].includes(action)) {
         gesture.current = action as 'cross'|'prayer'|'bow'|'greet';
@@ -1056,7 +1062,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       const oldX = avatar.position.x, oldZ = avatar.position.z;
       let moveX = 0, moveZ = 0, moving = false;
       if (manualMoving) {
-        movementTarget = null; pendingSeat = null; pendingAction = null;
+        movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
         if (isSitting) {
           standUp();
         } else if (gesture.current !== 'idle' && gesture.current !== 'stand') {
@@ -1079,7 +1085,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           moveX = diffX / distance; moveZ = diffZ / distance; moving = true;
         } else {
           movementTarget = null;
-          if (pendingSeat !== null) {
+          if (movementPath.length > 0) {
+            movementTarget = movementPath.shift() ?? null;
+          } else if (pendingSeat !== null) {
             const index = pendingSeat, seat = seatSpots[index];
             occupiedSeats.add(index); currentSeat = index; pendingSeat = null;
             avatar.position.set(seat.x,0,seat.z);
