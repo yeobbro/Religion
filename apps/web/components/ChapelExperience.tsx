@@ -25,7 +25,20 @@ export default function ChapelExperience() {
   const [volume, setVolume] = useState(0.35);
   const [sceneCandles, setSceneCandles] = useState(7);
   const [space, setSpace] = useState<'chapel' | 'garden'>('chapel');
+  const [quietSeconds, setQuietSeconds] = useState(180);
+  const [quietRunning, setQuietRunning] = useState(false);
   const handleCandleChange = useCallback((count: number) => setSceneCandles(count), []);
+
+  useEffect(() => {
+    if (!quietRunning) return;
+    const timer = window.setInterval(() => {
+      setQuietSeconds(seconds => {
+        if (seconds <= 1) { setQuietRunning(false); return 0; }
+        return seconds - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [quietRunning]);
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (!supabaseUrl || !supabaseKey) return;
@@ -135,6 +148,14 @@ export default function ChapelExperience() {
           <div className="section-kicker">02 / A MOMENT OF PRAYER</div><h2>마음을 모으는 짧은 기도</h2><p className="section-intro">잠시 멈추고 마음을 가다듬으며, 오늘의 기도를 시작해 보세요.</p>
           <div className="prayer-guide-visual"><span>✝</span><i></i></div>
           <blockquote className="prayer-quote">“주님, 제 마음 안에 머무르시고<br/>오늘의 걸음을 평화로 이끌어 주소서.”</blockquote>
+          <div className="quiet-prayer" aria-live="polite">
+            <div className="quiet-prayer-time">{String(Math.floor(quietSeconds / 60)).padStart(2, '0')}:{String(quietSeconds % 60).padStart(2, '0')}</div>
+            <p>{quietSeconds === 0 ? '고요한 기도 시간이 끝났습니다.' : quietRunning ? '잠시 모든 것을 내려놓고 머물러 보세요.' : '원하는 만큼 조용히 머무는 시간을 가져보세요.'}</p>
+            <div className="quiet-prayer-actions">
+              <button type="button" onClick={() => setQuietRunning(value => !value)}>{quietRunning ? '잠시 멈춤' : quietSeconds === 0 ? '다시 시작' : '3분 기도 시작'}</button>
+              <button type="button" className="quiet-reset" onClick={() => { setQuietRunning(false); setQuietSeconds(180); }}>초기화</button>
+            </div>
+          </div>
           <p className="micro-copy">성당 안에 밝혀진 촛불 {sceneCandles}개와 함께 잠시 침묵하며 기도해 보세요.</p>
         </section>
         <section className="panel chant-panel">
