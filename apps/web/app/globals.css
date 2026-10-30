@@ -469,3 +469,16 @@
     min-width: 104px;
   }
 }
+
+.immersive-audio-credit {
+  color: #d9c9a9;
+  font-size: 8px;
+  text-decoration: underline;
+  text-decoration-color: rgba(217, 201, 169, .55);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.immersive-audio-credit:hover { color: #fff0d5; }
+@media (max-width: 760px), (pointer: coarse) {
+  .immersive-audio-credit { display: none; }
+}
