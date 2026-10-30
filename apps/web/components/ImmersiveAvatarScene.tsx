@@ -96,6 +96,17 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const makeMat = (color: string, roughness = 0.82, metalness = 0, map?: THREE.Texture) =>
       new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
 
+    const woodColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_diff_2k.jpg');
+    const woodNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_nor_gl_2k.jpg');
+    const woodRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_rough_2k.jpg');
+    loadedTextures.push(woodColorMap, woodNormalMap, woodRoughnessMap);
+    [woodColorMap, woodNormalMap, woodRoughnessMap].forEach(texture => {
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(2.5, 1.5);
+    });
+    woodColorMap.colorSpace = THREE.SRGBColorSpace;
+
+
     // Photo-scanned PBR stone from Poly Haven (CC0) for the cathedral masonry.
     const textureLoader = new THREE.TextureLoader();
     const stoneColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_diff_2k.jpg');
@@ -121,6 +132,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const trim = makeMat('#b49a6b', 0.42, 0.42);
     const wood = makeMat('#523d2b', 0.7, 0, makeNoiseTexture('#523d2b', 10, 3, 2));
     const darkWood = makeMat('#33271f', 0.78, 0);
+    for (const material of [wood, darkWood]) {
+      material.map = woodColorMap;
+      material.normalMap = woodNormalMap;
+      material.roughnessMap = woodRoughnessMap;
+      material.needsUpdate = true;
+    }
     const ivory = makeMat('#e5dac3', 0.78, 0);
     const stone = makeMat('#aaa28f', 0.86, 0);
     for (const material of [plaster, darkPlaster, darkStone, stone]) {
@@ -536,13 +553,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.92, side: THREE.DoubleSide })
     );
     // Face the photo-textured reference and the 3D statue toward the garden approach.
-    maryImage.position.set(-1.78, 2.55, 0);
+    maryImage.position.set(-1.42, 2.55, 0);
     maryImage.rotation.y = -Math.PI / 2;
     maryGrotto.add(maryImage);
 
     // Volumetric Marian sculpture: carved robe, blue mantle, veil, face and joined hands.
     const maryStatue = new THREE.Group();
-    maryStatue.position.set(-1.62, 0, 0);
+    maryStatue.position.set(-1.72, 0, 0);
     maryGrotto.add(maryStatue);
     const statueIvory = makeMat('#eee9de', 0.74, 0.02);
     const statueBlue = makeMat('#526f9d', 0.78, 0.02);
@@ -844,7 +861,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (action === 'seat') {
         if (isSitting) { standUp(); setActionNotice('자리에서 일어났습니다.'); return; }
         const free = seatSpots.map((position,index)=>({position,index,distance:Math.hypot(avatar.position.x-position.x,avatar.position.z-position.z)}))
-          .filter(item=>!occupiedSeats.has(item.index)).sort((a,b)=>a.distance-b.distance);
+          .filter(item=>!occupiedSeats.has(item.index) && !collides(item.position.x,item.position.z)).sort((a,b)=>a.distance-b.distance);
         if (!free.length) { setActionNotice('비어 있는 자리가 없습니다.'); return; }
         pendingSeat = free[0].index;
         pendingAction = null;
@@ -1048,12 +1065,6 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         lastNearMary = nearShrine;
         setNearMary(nearShrine);
       }
-      const maryDistance = Math.hypot(avatar.position.x - 13.2, avatar.position.z - 49.5);
-      const nearShrine = maryDistance < 4.2;
-      if (nearShrine !== lastNearMary) {
-        lastNearMary = nearShrine;
-        setNearMary(nearShrine);
-      }
       (fontHalo.material as THREE.MeshBasicMaterial).opacity = near ? 0.9 : 0.38;
       fontLight.intensity = near ? 2.5 : 1.3;
       waterSurface.rotation.z = Math.sin(clock.elapsedTime * 0.9) * 0.018;
@@ -1158,7 +1169,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         <span className="mobile-joystick-knob" style={{transform:`translate(${joystickOffset.x}px, ${joystickOffset.y}px)`}} />
       </div>
       <div className="camera-touch-hint" aria-hidden="true">화면 드래그로 시점 변경 · 두 손가락 줌</div>
-      <div className="world-asset-credit">석재 PBR: Poly Haven CC0 · 성당/성모님 사진: Wikimedia Commons</div>
+      <div className="world-asset-credit">
+        석재·목재 PBR: Poly Haven CC0 ·
+        <a href="https://commons.wikimedia.org/wiki/File:Cathedral_Interior_with_Stained_Glass_and_Altar_(55260745408).jpg" target="_blank" rel="noreferrer">성당 사진 Michael Gaylard · CC BY 4.0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:EstatuaGrutadeLourdes-MDP.jpg" target="_blank" rel="noreferrer">마리아상 사진 Ezarate · CC BY-SA 4.0</a>
+      </div>
     </div>
   );
 }
