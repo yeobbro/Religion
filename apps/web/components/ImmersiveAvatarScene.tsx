@@ -3,322 +3,446 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-type Space = 'chapel' | 'garden';
-type Props = { space: Space; displayName: string };
+type Props = { displayName: string };
+type Blocker = { x: number; z: number; rx: number; rz: number };
 
-export default function ImmersiveAvatarScene({ space, displayName }: Props) {
+export default function ImmersiveAvatarScene({ displayName }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<'idle' | 'dip' | 'cross'>('idle');
   const gestureAt = useRef(0);
   const [nearFont, setNearFont] = useState(false);
   const [step, setStep] = useState<'water' | 'cross' | 'done'>('water');
+  const [pointerLocked, setPointerLocked] = useState(false);
 
   useEffect(() => {
     setStep('water');
     setNearFont(false);
     gesture.current = 'idle';
-  }, [space]);
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const chapel = space === 'chapel';
-    const background = chapel ? '#262b2b' : '#a5b59d';
-    const fogColor = chapel ? '#262b2b' : '#a5b59d';
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(background);
-    scene.fog = new THREE.Fog(fogColor, chapel ? 24 : 28, chapel ? 52 : 58);
+    scene.background = new THREE.Color('#aebbb4');
+    scene.fog = new THREE.Fog('#aebbb4', 42, 105);
 
-    const camera = new THREE.PerspectiveCamera(42, host.clientWidth / Math.max(1, host.clientHeight), 0.1, 120);
+    const camera = new THREE.PerspectiveCamera(58, host.clientWidth / Math.max(1, host.clientHeight), 0.1, 180);
     const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
     renderer.setSize(host.clientWidth, host.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = chapel ? 1.12 : 1.18;
+    renderer.toneMappingExposure = 1.08;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor(background, 1);
+    renderer.setClearColor('#aebbb4', 1);
     host.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(chapel ? '#eadfc8' : '#e6f0dc', chapel ? '#24231f' : '#4b6244', chapel ? 1.9 : 2.3);
+    const hemi = new THREE.HemisphereLight('#eee7d8', '#404a3b', 2.0);
     scene.add(hemi);
-    const keyLight = new THREE.DirectionalLight(chapel ? '#ffe5b6' : '#fff1cf', chapel ? 2.35 : 2.8);
-    keyLight.position.set(-7, 12, 8);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(1536, 1536);
-    keyLight.shadow.camera.left = -18;
-    keyLight.shadow.camera.right = 18;
-    keyLight.shadow.camera.top = 20;
-    keyLight.shadow.camera.bottom = -20;
-    keyLight.shadow.bias = -0.00025;
-    scene.add(keyLight);
-    const fillLight = new THREE.DirectionalLight(chapel ? '#b7c5cf' : '#d5e6c9', 0.8);
-    fillLight.position.set(7, 6, -10);
-    scene.add(fillLight);
+    const sun = new THREE.DirectionalLight('#fff0d4', 2.65);
+    sun.position.set(-12, 19, 10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -28;
+    sun.shadow.camera.right = 28;
+    sun.shadow.camera.top = 60;
+    sun.shadow.camera.bottom = -40;
+    sun.shadow.bias = -0.0003;
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight('#d5e1d6', 0.9);
+    fill.position.set(12, 9, -18);
+    scene.add(fill);
 
-    const material = (color: string, roughness = 0.84, metalness = 0) =>
-      new THREE.MeshStandardMaterial({ color, roughness, metalness });
-    const stone = material(chapel ? '#827f75' : '#999784');
-    const darkStone = material(chapel ? '#454943' : '#535c4d');
-    const floorStone = material(chapel ? '#77766d' : '#627653');
-    const gold = material('#b49a69', 0.38, 0.45);
-    const wood = material('#4a3829');
-    const ivory = material('#e0d5bc');
-    const skin = material('#d4a17d');
-    const coat = material('#c8bda9');
-    const coatShade = material('#a89c89');
-    const hair = material('#292321');
-    const trousers = material('#343a3c');
-    const shoes = material('#202527');
-    const bag = material('#554c40');
+    const blockers: Blocker[] = [];
+    const addBlocker = (x: number, z: number, rx: number, rz: number) => blockers.push({ x, z, rx, rz });
+    const collides = (x: number, z: number) => blockers.some(b =>
+      Math.abs(x - b.x) < b.rx + 0.36 && Math.abs(z - b.z) < b.rz + 0.36
+    );
+
+    const makeNoiseTexture = (base: string, seed: number, repeatX = 1, repeatY = 1) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = base;
+        ctx.fillRect(0, 0, 256, 256);
+        let n = seed >>> 0;
+        const rand = () => {
+          n = (n * 1664525 + 1013904223) >>> 0;
+          return n / 4294967296;
+        };
+        for (let i = 0; i < 4600; i += 1) {
+          const alpha = 0.025 + rand() * 0.095;
+          ctx.fillStyle = rand() > 0.52
+            ? `rgba(255,245,224,${alpha})`
+            : `rgba(20,24,18,${alpha})`;
+          const size = 1 + rand() * 3;
+          ctx.fillRect(rand() * 256, rand() * 256, size, size);
+        }
+      }
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeatX, repeatY);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    };
+
+    const makeMat = (color: string, roughness = 0.82, metalness = 0, map?: THREE.Texture) =>
+      new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
+    const plaster = makeMat('#d7d0c0', 0.94, 0, makeNoiseTexture('#d7d0c0', 2, 4, 3));
+    const darkPlaster = makeMat('#938d80', 0.94, 0, makeNoiseTexture('#938d80', 4, 3, 2));
+    const floorStone = makeMat('#827e72', 0.88, 0, makeNoiseTexture('#827e72', 6, 8, 14));
+    const aisleStone = makeMat('#a28a67', 0.78, 0, makeNoiseTexture('#a28a67', 8, 2, 12));
+    const trim = makeMat('#b49a6b', 0.42, 0.42);
+    const wood = makeMat('#523d2b', 0.7, 0, makeNoiseTexture('#523d2b', 10, 3, 2));
+    const darkWood = makeMat('#33271f', 0.78, 0);
+    const ivory = makeMat('#e5dac3', 0.78, 0);
+    const stone = makeMat('#aaa28f', 0.86, 0);
+    const greenery = makeMat('#58724c', 0.96, 0, makeNoiseTexture('#58724c', 12, 2, 2));
+    const grassMat = makeMat('#687e58', 0.98, 0, makeNoiseTexture('#687e58', 14, 20, 20));
+    const pathMat = makeMat('#b9af99', 0.92, 0, makeNoiseTexture('#b9af99', 16, 6, 20));
+    const skin = makeMat('#d3a17f', 0.72, 0);
+    const coat = makeMat('#c8bdab', 0.88, 0);
+    const coatShadow = makeMat('#a99d89', 0.86, 0);
+    const hair = makeMat('#292321', 0.9, 0);
+    const trousers = makeMat('#373d3e', 0.86, 0);
+    const shoes = makeMat('#202527', 0.8, 0);
+    const bag = makeMat('#554c40', 0.9, 0);
 
     const addMesh = (
       parent: THREE.Object3D,
       geometry: THREE.BufferGeometry,
-      mat: THREE.Material,
+      material: THREE.Material,
       x: number,
       y: number,
       z: number,
       castShadow = true,
       receiveShadow = true,
     ) => {
-      const mesh = new THREE.Mesh(geometry, mat);
+      const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(x, y, z);
       mesh.castShadow = castShadow;
       mesh.receiveShadow = receiveShadow;
       parent.add(mesh);
       return mesh;
     };
-    const addBox = (parent: THREE.Object3D, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) =>
-      addMesh(parent, new THREE.BoxGeometry(w, h, d), mat, x, y, z);
-    const addCylinder = (parent: THREE.Object3D, rt: number, rb: number, h: number, mat: THREE.Material, x: number, y: number, z: number, segments = 16) =>
-      addMesh(parent, new THREE.CylinderGeometry(rt, rb, h, segments), mat, x, y, z);
+    const addBox = (parent: THREE.Object3D, w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number, blocker = false) => {
+      const mesh = addMesh(parent, new THREE.BoxGeometry(w, h, d), material, x, y, z);
+      if (blocker) addBlocker(x, z, w / 2, d / 2);
+      return mesh;
+    };
+    const addCylinder = (parent: THREE.Object3D, rt: number, rb: number, h: number, material: THREE.Material, x: number, y: number, z: number, segments = 18, blocker = false) => {
+      const mesh = addMesh(parent, new THREE.CylinderGeometry(rt, rb, h, segments), material, x, y, z);
+      if (blocker) addBlocker(x, z, Math.max(rt, rb), Math.max(rt, rb));
+      return mesh;
+    };
+    const addGroundPlane = (parent: THREE.Object3D, width: number, depth: number, material: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = addMesh(parent, new THREE.PlaneGeometry(width, depth), material, x, y, z, false, true);
+      mesh.rotation.x = -Math.PI / 2;
+      return mesh;
+    };
 
-    // The visitor walks inside a modeled environment, not on top of a flat photograph.
-    const environment = new THREE.Group();
-    scene.add(environment);
+    // One continuous site: nave, entrance threshold, courtyard, and garden.
+    const world = new THREE.Group();
+    scene.add(world);
 
-    if (chapel) {
-      const floor = addMesh(environment, new THREE.PlaneGeometry(24, 36), floorStone, 0, -0.12, -3, false, true);
-      floor.rotation.x = -Math.PI / 2;
-      for (let x = -10; x <= 10; x += 2) {
-        for (let z = -19; z <= 11; z += 2) {
-          const tile = addBox(environment, 1.94, 0.025, 1.94, material((Math.abs(x + z) % 4 === 0) ? '#88867a' : '#77766d'), x, -0.085, z);
-          tile.receiveShadow = true;
-        }
+    // Outside ground begins before the threshold and continues well into the garden.
+    addGroundPlane(world, 60, 100, grassMat, 0, -0.24, 38);
+    addGroundPlane(world, 22.2, 42, floorStone, 0, -0.1, -1);
+    for (let x = -10; x <= 10; x += 2) {
+      for (let z = -20; z <= 18; z += 2) {
+        addMesh(world, new THREE.BoxGeometry(1.94, 0.035, 1.94), floorStone, x, -0.075, z, false, true);
       }
-      addBox(environment, 22, 0.4, 36, darkStone, 0, 7.7, -3);
-      addBox(environment, 0.55, 8, 36, stone, -11.1, 3.8, -3);
-      addBox(environment, 0.55, 8, 36, stone, 11.1, 3.8, -3);
-      addBox(environment, 22, 8, 0.55, stone, 0, 3.8, 15);
-      addBox(environment, 22, 8, 0.55, darkStone, 0, 3.8, -21);
+    }
+    addGroundPlane(world, 3.4, 40, aisleStone, 0, -0.045, -1);
+    addGroundPlane(world, 5.4, 48, pathMat, 0, -0.035, 39);
 
-      // Repeated stone columns and high arch ribs create a deep nave.
-      for (const x of [-8.3, -5.5, 5.5, 8.3]) {
-        for (const z of [-16, -10, -4, 2, 8]) {
-          addCylinder(environment, 0.34, 0.42, 7.1, ivory, x, 3.45, z, 18);
-          addCylinder(environment, 0.55, 0.55, 0.28, gold, x, 7.08, z, 16);
-          addBox(environment, 0.78, 0.16, 0.78, gold, x, 7.28, z);
-        }
-      }
-      for (const z of [-15, -9, -3, 3, 9]) {
-        const arch = new THREE.Mesh(
-          new THREE.TorusGeometry(5.5, 0.13, 10, 40, Math.PI),
-          ivory,
-        );
-        arch.position.set(0, 5.2, z);
-        arch.castShadow = true;
-        environment.add(arch);
-      }
-
-      // Tall stained-glass panels set into both side walls.
-      const glassMats = ['#527d8b', '#b36e54', '#d1ae63', '#6e8d79', '#9d7894'].map(color =>
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82, side: THREE.DoubleSide })
-      );
-      for (const side of [-1, 1]) {
-        for (const z of [-13, -6, 1, 8]) {
-          const x = side * 10.78;
-          const glass = addMesh(environment, new THREE.PlaneGeometry(2.05, 3.85), glassMats[(Math.abs(z) + (side > 0 ? 1 : 0)) % glassMats.length], x, 4.45, z, false, false);
-          glass.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-          const frame = material('#493e31', 0.5, 0.2);
-          addBox(environment, 0.13, 4.05, 2.22, frame, x - side * 0.015, 4.45, z);
-          const inset = addMesh(environment, new THREE.PlaneGeometry(1.88, 3.68), glassMats[(Math.abs(z) + (side > 0 ? 2 : 1)) % glassMats.length], x - side * 0.09, 4.45, z, false, false);
-          inset.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        }
-      }
-
-      // Altar, tabernacle and a prominent cross at the far end of the nave.
-      addBox(environment, 6.2, 0.45, 2.1, gold, 0, 1.25, -16.8);
-      addBox(environment, 5.4, 1.15, 1.8, ivory, 0, 0.55, -16.8);
-      addBox(environment, 2.3, 2.1, 1.4, wood, 0, 2.48, -19.1);
-      addBox(environment, 0.2, 2.9, 0.2, gold, 0, 5.1, -19.85);
-      addBox(environment, 1.75, 0.2, 0.2, gold, 0, 5.62, -19.85);
-      addBox(environment, 8.2, 0.14, 0.22, gold, 0, 0.35, -15.35);
-
-      // Wooden pews in two banks, leaving an open centre aisle.
-      for (const z of [-7.5, -4, -0.5, 3]) {
-        for (const x of [-4.1, 4.1]) {
-          addBox(environment, 3.1, 0.2, 0.52, wood, x, 0.78, z);
-          addBox(environment, 3.1, 0.92, 0.2, wood, x, 1.18, z + 0.43);
-          for (const dx of [-1.28, 1.28]) addBox(environment, 0.15, 0.78, 0.2, gold, x + dx, 0.36, z);
-        }
-      }
-      // Candle stands and warm lights around the altar.
-      for (const x of [-2.6, -1.7, -0.85, 0, 0.85, 1.7, 2.6]) {
-        addCylinder(environment, 0.12, 0.18, 0.72, gold, x, 0.38, -14.5, 12);
-        addCylinder(environment, 0.1, 0.12, 0.62, ivory, x, 1.05, -14.5, 12);
-        const flame = addMesh(environment, new THREE.SphereGeometry(0.085, 12, 10), new THREE.MeshBasicMaterial({ color: '#ffc66e' }), x, 1.42, -14.5, false, false);
-        flame.scale.set(0.78, 1.45, 0.78);
-        const light = new THREE.PointLight('#ffbf70', 1.15, 3.2, 2);
-        light.position.set(x, 1.55, -14.5);
-        environment.add(light);
-      }
-      const aisle = addMesh(environment, new THREE.PlaneGeometry(2.8, 28), material('#927c57'), 0, -0.045, -3, false, false);
-      aisle.rotation.x = -Math.PI / 2;
-
-      // Holy-water font near the entrance.
-      const font = new THREE.Group();
-      font.name = 'holy-water-font';
-      font.position.set(-1.65, 0, 3.45);
-      environment.add(font);
-      addCylinder(font, 0.43, 0.5, 0.18, gold, 0, 0.09, 0, 24);
-      addCylinder(font, 0.18, 0.25, 0.72, stone, 0, 0.52, 0, 18);
-      addCylinder(font, 0.4, 0.23, 0.22, stone, 0, 0.99, 0, 28);
-      const bowlRim = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.045, 10, 28), gold);
-      bowlRim.rotation.x = Math.PI / 2;
-      bowlRim.position.y = 1.11;
-      font.add(bowlRim);
-      const waterTop = addMesh(font, new THREE.CircleGeometry(0.32, 28), new THREE.MeshStandardMaterial({ color: '#91bbb6', roughness: 0.16, metalness: 0.25, emissive: '#244947', emissiveIntensity: 0.3 }), 0, 1.1, 0, false, false);
-      waterTop.rotation.x = -Math.PI / 2;
-      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.018, 8, 36), new THREE.MeshBasicMaterial({ color: '#ead8ad', transparent: true, opacity: 0.48 }));
-      halo.rotation.x = Math.PI / 2;
-      halo.position.y = 0.035;
-      font.add(halo);
-      const glow = new THREE.PointLight('#c7e4d8', 1.8, 4.2, 2);
-      glow.position.y = 1.7;
-      font.add(glow);
-      (font.userData as { halo?: THREE.Mesh; glow?: THREE.PointLight }).halo = halo;
-      (font.userData as { halo?: THREE.Mesh; glow?: THREE.PointLight }).glow = glow;
-      (font.userData as { waterTop?: THREE.Mesh }).waterTop = waterTop;
-
-      // Warm side sconces and a rose window at the rear.
-      for (const side of [-1, 1]) {
-        for (const z of [-11, -3, 5]) {
-          const sconce = addMesh(environment, new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffc778' }), side * 9.7, 3.1, z, false, false);
-          const lamp = new THREE.PointLight('#edbd77', 1.25, 5, 2);
-          lamp.position.copy(sconce.position);
-          environment.add(lamp);
-        }
-      }
-      const rose = addMesh(environment, new THREE.CircleGeometry(1.4, 36), glassMats[2], 0, 5.7, -20.67, false, false);
-      rose.rotation.y = Math.PI;
-    } else {
-      // An outdoor garden with terrain, winding stone paths, a reflecting pond and trees.
-      const ground = addMesh(environment, new THREE.PlaneGeometry(46, 54), material('#617b55'), 0, -0.1, -2, false, true);
-      ground.rotation.x = -Math.PI / 2;
-      const path = addMesh(environment, new THREE.PlaneGeometry(4.2, 37), material('#bdb39b'), 0, -0.035, -3.2, false, true);
-      path.rotation.x = -Math.PI / 2;
-      const pathEdge = material('#827a65');
-      for (const x of [-2.18, 2.18]) addBox(environment, 0.18, 0.09, 37, pathEdge, x, -0.01, -3.2);
-
-      // Gentle hills close off the horizon.
-      for (const [x, z, s] of [[-15, -15, 7], [0, -21, 9], [15, -16, 8], [-17, 9, 8], [17, 8, 8]] as [number, number, number][]) {
-        const hill = addMesh(environment, new THREE.SphereGeometry(1, 20, 14), material('#708866'), x, 1.5, z, false, true);
-        hill.scale.set(s, s * 0.48, s * 0.9);
-      }
-
-      // Trees, trunks and layered canopies are separate 3D geometry.
-      for (const x of [-11, -8, 8, 11]) {
-        for (const z of [-15, -8, 0, 8, 15]) {
-          addCylinder(environment, 0.22, 0.34, 3.2, material('#66503a'), x, 1.55, z, 12);
-          for (let layer = 0; layer < 3; layer += 1) {
-            const crown = addMesh(environment, new THREE.IcosahedronGeometry(1.65 - layer * 0.12, 1), material(layer === 1 ? '#54734d' : '#66835c'), x + (layer % 2 ? 0.25 : -0.18), 3.0 + layer * 0.72, z, true, true);
-            crown.scale.set(1.1, 0.94, 1);
-          }
-        }
-      }
-      // Flowering shrubs along the path.
-      for (const x of [-5.3, 5.3]) {
-        for (let i = 0; i < 15; i += 1) {
-          const z = -13 + i * 1.75;
-          addMesh(environment, new THREE.IcosahedronGeometry(0.55, 1), material(i % 2 ? '#54744c' : '#6b8558'), x + Math.sin(i * 1.7) * 0.25, 0.45, z, true, true);
-          const bloom = ['#d6b0a4', '#ead0a0', '#d6c3d8'][i % 3];
-          for (let petal = 0; petal < 4; petal += 1) {
-            addMesh(environment, new THREE.SphereGeometry(0.095, 8, 8), material(bloom), x + Math.cos(petal * Math.PI / 2) * 0.28, 0.85, z + Math.sin(petal * Math.PI / 2) * 0.28, false, false);
-          }
-        }
-      }
-
-      // A stone fountain and water surface at the centre of the garden.
-      addCylinder(environment, 1.65, 1.85, 0.48, material('#999887'), 0, 0.24, -7, 32);
-      addCylinder(environment, 1.38, 1.38, 0.08, material('#7fa9a5', 0.18, 0.2), 0, 0.52, -7, 32);
-      addCylinder(environment, 0.2, 0.29, 1.18, material('#aaa28f'), 0, 1.1, -7, 18);
-      addMesh(environment, new THREE.SphereGeometry(0.27, 16, 12), material('#90bab3', 0.15, 0.2), 0, 1.82, -7, false, false);
-      const fountainLight = new THREE.PointLight('#c4e2d8', 1.3, 7, 2);
-      fountainLight.position.set(0, 2.3, -7);
-      environment.add(fountainLight);
-
-      // Benches and lanterns offer smaller points of interest.
-      for (const x of [-5.4, 5.4]) {
-        addBox(environment, 1.8, 0.18, 0.58, wood, x, 0.76, 2.5);
-        addBox(environment, 1.8, 0.85, 0.15, wood, x, 1.17, 2.8);
-        for (const dx of [-0.68, 0.68]) addBox(environment, 0.12, 0.72, 0.16, gold, x + dx, 0.38, 2.5);
-        const lantern = new THREE.Group();
-        lantern.position.set(x * 1.4, 0, -1.4);
-        environment.add(lantern);
-        addCylinder(lantern, 0.16, 0.16, 0.75, gold, 0, 0.38, 0, 12);
-        const light = new THREE.PointLight('#ffd48e', 1.5, 4, 2);
-        light.position.y = 0.9;
-        lantern.add(light);
-      }
-
-      // A small chapel visible in the far end of the garden.
-      addBox(environment, 7.2, 4.6, 4.8, material('#d2c7ad'), 0, 2.3, -21);
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(5.3, 3.1, 4), material('#695a47'));
-      roof.position.set(0, 6.15, -21);
-      roof.rotation.y = Math.PI / 4;
-      roof.castShadow = true;
-      environment.add(roof);
-      addBox(environment, 0.16, 1.45, 0.12, gold, 0, 8.05, -21);
-      addBox(environment, 0.88, 0.15, 0.12, gold, 0, 8.3, -21);
-      addBox(environment, 1.45, 2.5, 0.2, wood, 0, 1.25, -18.55);
-      const pond = addMesh(environment, new THREE.CircleGeometry(2.3, 48), new THREE.MeshStandardMaterial({ color: '#729a98', roughness: 0.17, metalness: 0.2, transparent: true, opacity: 0.92 }), 5.3, 0.02, -10.5, false, false);
-      pond.rotation.x = -Math.PI / 2;
+    // CHURCH: long nave, side aisles, side walls and vaulted ceiling.
+    addBox(world, 22.8, 0.5, 42, darkPlaster, 0, 8.35, -1);
+    addBox(world, 0.6, 8.2, 42, plaster, -11.35, 3.85, -1, true);
+    addBox(world, 0.6, 8.2, 42, plaster, 11.35, 3.85, -1, true);
+    addBox(world, 22.8, 8.2, 0.6, plaster, 0, 3.85, -22, true);
+    // The front wall has a real open doorway; there is no invisible wall across the threshold.
+    addBox(world, 8.1, 8.2, 0.6, plaster, -7.3, 3.85, 19.5, true);
+    addBox(world, 8.1, 8.2, 0.6, plaster, 7.3, 3.85, 19.5, true);
+    addBox(world, 6.5, 1.9, 0.6, plaster, 0, 7.15, 19.5);
+    for (const x of [-2.9, 2.9]) {
+      addCylinder(world, 0.42, 0.48, 7.9, ivory, x, 3.9, 19.15, 20, true);
+      addBox(world, 1.05, 0.34, 1.0, trim, x, 7.95, 19.15);
     }
 
-    // Movable visitor character. Slightly smaller in frame with a more distant follow camera.
-    const avatar = new THREE.Group();
-    avatar.position.set(0, 0, 4.8);
-    avatar.scale.setScalar(0.84);
-    scene.add(avatar);
-    const addAvatar = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) =>
-      addMesh(avatar, geo, mat, x, y, z);
+    // Open wooden entrance doors on their hinges, so the garden reads as the next space.
+    const leftDoor = new THREE.Group();
+    leftDoor.position.set(-2.9, 0, 19.5);
+    leftDoor.rotation.y = -0.92;
+    world.add(leftDoor);
+    addBox(leftDoor, 2.75, 5.6, 0.22, wood, -1.34, 2.8, 0);
+    for (const y of [0.9, 2.8, 4.7]) addBox(leftDoor, 2.55, 0.08, 0.28, trim, -1.34, y, 0);
+    const rightDoor = new THREE.Group();
+    rightDoor.position.set(2.9, 0, 19.5);
+    rightDoor.rotation.y = 0.92;
+    world.add(rightDoor);
+    addBox(rightDoor, 2.75, 5.6, 0.22, wood, 1.34, 2.8, 0);
+    for (const y of [0.9, 2.8, 4.7]) addBox(rightDoor, 2.55, 0.08, 0.28, trim, 1.34, y, 0);
 
-    addAvatar(new THREE.CapsuleGeometry(0.31, 0.66, 5, 12), coat, 0, 1.34, 0);
-    addAvatar(new THREE.CylinderGeometry(0.1, 0.11, 0.18, 12), skin, 0, 1.85, 0);
-    const head = addAvatar(new THREE.SphereGeometry(0.235, 18, 14), skin, 0, 2.08, -0.02);
+    // A high stone vault, rib arches and heavy piers.
+    for (const x of [-8.7, -5.8, 5.8, 8.7]) {
+      for (const z of [-17, -11, -5, 1, 7, 13]) {
+        addCylinder(world, 0.31, 0.4, 7.65, ivory, x, 3.8, z, 18, true);
+        addCylinder(world, 0.55, 0.55, 0.26, trim, x, 7.78, z, 18);
+        addBox(world, 0.9, 0.18, 0.9, trim, x, 7.98, z);
+      }
+    }
+    for (const z of [-17, -11, -5, 1, 7, 13]) {
+      for (const x of [-4.3, 0, 4.3]) {
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.14, 10, 48, Math.PI), ivory);
+        rib.position.set(x, 6.15, z);
+        rib.rotation.z = Math.PI;
+        rib.castShadow = true;
+        world.add(rib);
+      }
+    }
+
+    // Stained glass panels: jewel tones with lead divisions.
+    const glassColors = ['#547d8e', '#bd805f', '#d5b76f', '#6e927e', '#947f9f', '#d1c18b'];
+    for (const side of [-1, 1]) {
+      for (const z of [-15, -8, -1, 6, 13]) {
+        const x = side * 10.98;
+        const glassMat = new THREE.MeshStandardMaterial({
+          color: glassColors[(Math.abs(z) + (side > 0 ? 2 : 0)) % glassColors.length],
+          roughness: 0.24,
+          metalness: 0.08,
+          emissive: glassColors[(Math.abs(z) + (side > 0 ? 2 : 0)) % glassColors.length],
+          emissiveIntensity: 0.24,
+          transparent: true,
+          opacity: 0.86,
+          side: THREE.DoubleSide,
+        });
+        const panel = addMesh(world, new THREE.PlaneGeometry(1.95, 3.85), glassMat, x, 4.65, z, false, false);
+        panel.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+        for (const dz of [-1, 0, 1]) addBox(world, 0.11, 3.95, 0.1, trim, x - side * 0.08, 4.65, z + dz * 0.9);
+        addBox(world, 0.12, 4.0, 2.1, darkWood, x - side * 0.11, 4.65, z);
+      }
+    }
+
+    // Fourteen Stations of the Cross: seven framed relief panels on each side.
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 7; i += 1) {
+        const z = -16 + i * 4.8;
+        const x = side * 10.72;
+        addBox(world, 0.12, 1.55, 1.18, darkWood, x, 3.05, z);
+        addBox(world, 0.08, 1.3, 0.92, trim, x - side * 0.08, 3.05, z);
+        addBox(world, 0.06, 1.05, 0.68, stone, x - side * 0.14, 3.05, z);
+        addBox(world, 0.08, 0.62, 0.075, trim, x - side * 0.2, 3.28, z);
+        addBox(world, 0.08, 0.08, 0.38, trim, x - side * 0.2, 3.36, z);
+        addMesh(world, new THREE.SphereGeometry(0.18, 12, 10), darkWood, x - side * 0.2, 2.9, z, false, false);
+      }
+    }
+
+    // SANCTUARY: raised chancel, altar, crucifix, tabernacle, ambo and presider's chair.
+    addBox(world, 12.2, 0.35, 6.0, trim, 0, 0.18, -17.1);
+    addBox(world, 11.7, 0.22, 5.55, ivory, 0, 0.42, -17.1);
+    addBox(world, 5.2, 0.48, 1.85, trim, 0, 1.1, -15.8);
+    addBox(world, 4.9, 0.96, 1.62, ivory, 0, 0.58, -15.8);
+    addBox(world, 2.1, 1.85, 1.25, wood, 0, 2.45, -18.7);
+    // Tabernacle set behind the altar, beneath the sanctuary cross.
+    addBox(world, 1.45, 1.25, 0.82, trim, 0, 3.95, -19.8);
+    addBox(world, 1.12, 0.82, 0.62, ivory, 0, 3.95, -19.25);
+    addMesh(world, new THREE.SphereGeometry(0.48, 20, 14), trim, 0, 4.72, -19.25);
+    addBox(world, 0.15, 2.45, 0.16, trim, 0, 6.5, -21.35);
+    addBox(world, 1.42, 0.18, 0.16, trim, 0, 6.9, -21.35);
+    const sanctuaryLamp = new THREE.PointLight('#ff5b3d', 0.9, 5, 2);
+    sanctuaryLamp.position.set(1.25, 3.4, -18.8);
+    world.add(sanctuaryLamp);
+    // Ambo / pulpit with a book.
+    addBox(world, 0.95, 1.25, 0.78, wood, -3.4, 0.82, -14.6, true);
+    addBox(world, 1.08, 0.12, 0.88, trim, -3.4, 1.5, -14.6);
+    const lectern = addBox(world, 0.76, 0.08, 0.52, ivory, -3.4, 1.62, -14.55);
+    lectern.rotation.x = -0.18;
+    // Priest's chair and two minister seats.
+    addBox(world, 0.95, 1.65, 0.8, wood, 3.35, 1.0, -15.0, true);
+    addBox(world, 1.15, 0.18, 0.92, trim, 3.35, 1.92, -15.0);
+    for (const x of [2.1, 4.6]) addBox(world, 0.72, 0.82, 0.62, wood, x, 0.55, -13.9, true);
+
+    // Congregation seating and central aisle.
+    for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
+      for (const x of [-4.25, 4.25]) {
+        addBox(world, 3.55, 0.22, 0.58, wood, x, 0.82, z, true);
+        addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42, true);
+        for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z, true);
+      }
+    }
+
+    // Baptismal font close to the main entrance.
+    const holyFont = new THREE.Group();
+    holyFont.name = 'holy-water-font';
+    holyFont.position.set(-2.2, 0, 12.0);
+    world.add(holyFont);
+    addCylinder(holyFont, 0.5, 0.58, 0.2, trim, 0, 0.1, 0, 28);
+    addCylinder(holyFont, 0.2, 0.29, 0.95, stone, 0, 0.65, 0, 20);
+    addCylinder(holyFont, 0.55, 0.34, 0.3, ivory, 0, 1.25, 0, 32);
+    const fontRim = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.055, 12, 36), trim);
+    fontRim.rotation.x = Math.PI / 2;
+    fontRim.position.y = 1.42;
+    holyFont.add(fontRim);
+    const waterSurface = addMesh(holyFont, new THREE.CircleGeometry(0.43, 32), new THREE.MeshStandardMaterial({ color: '#8dbbb7', roughness: 0.16, metalness: 0.28, emissive: '#315d59', emissiveIntensity: 0.25 }), 0, 1.405, 0, false, false);
+    waterSurface.rotation.x = -Math.PI / 2;
+    const fontHalo = new THREE.Mesh(new THREE.TorusGeometry(0.76, 0.025, 8, 40), new THREE.MeshBasicMaterial({ color: '#eed6a4', transparent: true, opacity: 0.38 }));
+    fontHalo.rotation.x = Math.PI / 2;
+    fontHalo.position.y = 0.035;
+    holyFont.add(fontHalo);
+    const fontLight = new THREE.PointLight('#c8e8dc', 1.3, 4.5, 2);
+    fontLight.position.set(0, 1.7, 0);
+    holyFont.add(fontLight);
+    addBlocker(-2.2, 12, 0.8, 0.8);
+
+    // Side confessionals, kneelers and small prayer alcoves.
+    for (const side of [-1, 1]) {
+      const x = side * 8.9;
+      addBox(world, 2.3, 2.8, 1.45, darkWood, x, 1.4, 7.4, true);
+      addBox(world, 1.1, 1.7, 0.08, wood, x, 1.65, 6.65);
+      addBox(world, 0.72, 1.0, 0.05, trim, x, 1.65, 6.58);
+      addBox(world, 0.95, 0.08, 0.08, trim, x, 2.2, 6.54);
+      addBox(world, 1.6, 0.18, 0.52, wood, x, 0.72, 4.6, true);
+      const alcoveLight = new THREE.PointLight('#edc98c', 0.5, 4);
+      alcoveLight.position.set(x, 2.3, 5.4);
+      world.add(alcoveLight);
+    }
+
+    // Choir stalls and organ loft near the entrance end of the nave.
+    addBox(world, 8.0, 0.35, 2.0, darkWood, 0, 6.0, 15.0);
+    addBox(world, 8.2, 0.16, 0.35, trim, 0, 6.25, 14.1);
+    for (let x = -3.1; x <= 3.1; x += 1.05) {
+      addBox(world, 0.16, 1.55, 0.18, darkWood, x, 6.95, 14.2);
+    }
+    addBox(world, 2.6, 2.1, 0.5, wood, 0, 4.8, 15.7);
+    for (let x = -0.9; x <= 0.9; x += 0.3) addCylinder(world, 0.055, 0.055, 1.45, trim, x, 5.25, 15.35, 10);
+
+    // COURTYARD: a real exterior zone directly beyond the open church doors.
+    // Paving stones continue from the nave into the courtyard; no menu or teleport is used.
+    for (let z = 20; z <= 54; z += 2.3) {
+      for (let x = -2; x <= 2; x += 1.25) {
+        addMesh(world, new THREE.BoxGeometry(1.18, 0.05, 2.15), pathMat, x, -0.005, z, false, true);
+      }
+    }
+    // Low cloister arcades frame the garden on both sides of the path.
+    for (const side of [-1, 1]) {
+      const x = side * 13.5;
+      for (let z = 25; z <= 50; z += 5) {
+        addBox(world, 0.65, 4.2, 0.65, stone, x, 2.1, z, true);
+        addBox(world, 4.5, 0.3, 0.6, trim, x - side * 1.8, 4.35, z);
+      }
+      addBox(world, 0.6, 4.1, 32, plaster, side * 15.9, 2.05, 38, true);
+    }
+
+    // Garden beds, trees, flower borders, benches and lamps.
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 5; i += 1) {
+        const x = side * (7.6 + (i % 2) * 2.4);
+        const z = 25 + i * 6.1;
+        addBox(world, 3.5, 0.35, 3.0, darkStone, x, 0.16, z);
+        addBox(world, 3.3, 0.16, 2.8, greenery, x, 0.38, z);
+        for (let k = 0; k < 14; k += 1) {
+          const px = x + ((k % 4) - 1.5) * 0.6;
+          const pz = z + (Math.floor(k / 4) - 1.5) * 0.55;
+          const flowerColor = ['#e3c4b7', '#e9d59d', '#d1c4df', '#fff0de'][k % 4];
+          addMesh(world, new THREE.SphereGeometry(0.14, 10, 8), makeMat(flowerColor, 0.8), px, 0.72, pz, false, false);
+        }
+        addCylinder(world, 0.22, 0.32, 3.6, makeMat('#67513a'), side * (10.8 + (i % 2) * 1.1), 1.8, z, 12, true);
+        const treeX = side * (10.8 + (i % 2) * 1.1);
+        for (let layer = 0; layer < 3; layer += 1) {
+          const crown = addMesh(world, new THREE.IcosahedronGeometry(1.65 - layer * 0.12, 1), makeMat(layer === 1 ? '#58774f' : '#6d895f', 0.98), treeX + (layer % 2 ? 0.22 : -0.12), 3.0 + layer * 0.72, z, true, true);
+          crown.scale.set(1.1, 0.95, 1.05);
+        }
+      }
+    }
+    // Garden fountain; its basin is visible from the main threshold.
+    const fountain = new THREE.Group();
+    fountain.position.set(3.8, 0, 39.5);
+    world.add(fountain);
+    addCylinder(fountain, 2.05, 2.3, 0.55, stone, 0, 0.28, 0, 40);
+    addCylinder(fountain, 1.78, 1.78, 0.08, makeMat('#7ca7a2', 0.18, 0.2), 0, 0.59, 0, 40);
+    addCylinder(fountain, 0.24, 0.34, 1.38, trim, 0, 1.25, 0, 20);
+    const fountainWater = addMesh(fountain, new THREE.SphereGeometry(0.3, 18, 14), makeMat('#a6cfca', 0.18, 0.15), 0, 2.05, 0, false, false);
+    const fountainLight = new THREE.PointLight('#b9dfd5', 1.5, 7, 2);
+    fountainLight.position.set(0, 2.4, 0);
+    fountain.add(fountainLight);
+    addBlocker(3.8, 39.5, 2.25, 2.25);
+
+    // Marian prayer grotto at the garden edge.
+    addBox(world, 2.8, 3.2, 1.25, stone, 10.8, 1.6, 43.5);
+    const grottoArch = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.16, 12, 40, Math.PI), ivory);
+    grottoArch.position.set(10.8, 2.9, 42.8);
+    grottoArch.rotation.z = Math.PI;
+    world.add(grottoArch);
+    addMesh(world, new THREE.SphereGeometry(0.35, 16, 12), ivory, 10.8, 3.8, 43.2);
+    addMesh(world, new THREE.ConeGeometry(0.62, 1.55, 8), makeMat('#d8d4c7'), 10.8, 2.35, 43.2);
+    addCylinder(world, 0.18, 0.24, 0.7, trim, 10.8, 0.35, 43.2, 12, true);
+
+    // Wooden benches and warm low garden lamps.
+    for (const x of [-6.7, 7.1]) {
+      addBox(world, 2.2, 0.18, 0.62, wood, x, 0.75, 33.2, true);
+      addBox(world, 2.2, 0.82, 0.14, wood, x, 1.18, 33.5, true);
+      const lantern = new THREE.Group();
+      lantern.position.set(x, 0, 28.5);
+      world.add(lantern);
+      addCylinder(lantern, 0.15, 0.2, 1.55, darkWood, 0, 0.78, 0, 12);
+      const lampGlass = addMesh(lantern, new THREE.SphereGeometry(0.19, 12, 10), new THREE.MeshBasicMaterial({ color: '#ffdf9d' }), 0, 1.65, 0, false, false);
+      lampGlass.scale.y = 1.3;
+      const lamp = new THREE.PointLight('#ffcf88', 0.8, 5, 2);
+      lamp.position.set(0, 1.8, 0);
+      lantern.add(lamp);
+      addBlocker(x, 33.2, 1.25, 0.8);
+    }
+
+    // Low grass and flower island define the open walking space without boxing it in.
+    const island = addMesh(world, new THREE.SphereGeometry(1, 20, 12), greenery, -7.2, 0.32, 45, false, true);
+    island.scale.set(2.2, 0.36, 3.2);
+
+    // A small outdoor chapel is visible farther down the same continuous path.
+    addBox(world, 6.8, 4.8, 4.8, plaster, 0, 2.4, 59);
+    const gardenRoof = new THREE.Mesh(new THREE.ConeGeometry(5.2, 3.0, 4), darkWood);
+    gardenRoof.position.set(0, 6.3, 59);
+    gardenRoof.rotation.y = Math.PI / 4;
+    gardenRoof.castShadow = true;
+    world.add(gardenRoof);
+    addBox(world, 0.14, 1.3, 0.12, trim, 0, 8.4, 59);
+    addBox(world, 0.85, 0.14, 0.12, trim, 0, 8.65, 59);
+
+    // Movable 3D avatar, scaled to natural human proportions.
+    const avatar = new THREE.Group();
+    avatar.position.set(0, 0, 8.8);
+    avatar.scale.setScalar(0.72);
+    scene.add(avatar);
+    const avatarPart = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) =>
+      addMesh(avatar, geometry, material, x, y, z);
+    avatarPart(new THREE.CapsuleGeometry(0.31, 0.66, 5, 12), coat, 0, 1.34, 0);
+    avatarPart(new THREE.CylinderGeometry(0.1, 0.11, 0.18, 12), skin, 0, 1.85, 0);
+    const head = avatarPart(new THREE.SphereGeometry(0.235, 18, 14), skin, 0, 2.08, -0.02);
     head.scale.set(0.92, 1.08, 0.95);
-    const hairCap = addAvatar(new THREE.SphereGeometry(0.24, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), hair, 0, 2.16, 0.01);
+    const hairCap = avatarPart(new THREE.SphereGeometry(0.24, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), hair, 0, 2.16, 0.01);
     hairCap.scale.set(1.02, 0.88, 1.03);
-    addAvatar(new THREE.BoxGeometry(0.51, 0.68, 0.2), bag, 0, 1.34, 0.29);
+    avatarPart(new THREE.BoxGeometry(0.51, 0.68, 0.2), bag, 0, 1.34, 0.29);
 
     const makeLimb = (x: number, y: number, mat: THREE.Material, length: number, radius: number) => {
       const pivot = new THREE.Group();
       pivot.position.set(x, y, 0);
       avatar.add(pivot);
-      const body = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length - radius * 2, 4, 10), mat);
-      body.position.y = -length * 0.46;
-      body.castShadow = true;
-      pivot.add(body);
+      const limb = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length - radius * 2, 4, 10), mat);
+      limb.position.y = -length * 0.46;
+      limb.castShadow = true;
+      pivot.add(limb);
       const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), skin);
       hand.position.y = -length;
       pivot.add(hand);
       return pivot;
     };
-    const leftArm = makeLimb(-0.39, 1.64, coatShade, 0.62, 0.105);
-    const rightArm = makeLimb(0.39, 1.64, coatShade, 0.62, 0.105);
+    const leftArm = makeLimb(-0.39, 1.64, coatShadow, 0.62, 0.105);
+    const rightArm = makeLimb(0.39, 1.64, coatShadow, 0.62, 0.105);
     const makeLeg = (x: number) => {
       const pivot = new THREE.Group();
       pivot.position.set(x, 0.88, 0);
@@ -335,46 +459,54 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
     };
     const leftLeg = makeLeg(-0.16);
     const rightLeg = makeLeg(0.16);
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 32), new THREE.MeshBasicMaterial({ color: '#090b09', transparent: true, opacity: 0.26, depthWrite: false }));
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = 0.025;
-    avatar.add(shadow);
 
-    // Tiny baptismal-name marker attached to the avatar in the 3D world.
+    // Small, unobtrusive baptismal-name plaque above the avatar.
     const labelCanvas = document.createElement('canvas');
     labelCanvas.width = 512;
-    labelCanvas.height = 112;
-    const context = labelCanvas.getContext('2d');
-    if (context) {
-      context.fillStyle = 'rgba(18, 22, 19, 0.72)';
-      context.beginPath();
-      context.roundRect(8, 8, 496, 96, 44);
-      context.fill();
-      context.font = '600 42px -apple-system, BlinkMacSystemFont, sans-serif';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillStyle = '#f7f0df';
-      context.fillText(displayName.trim().slice(0, 18) || '순례자', 256, 57, 460);
+    labelCanvas.height = 96;
+    const labelCtx = labelCanvas.getContext('2d');
+    if (labelCtx) {
+      labelCtx.fillStyle = 'rgba(20, 23, 20, 0.62)';
+      labelCtx.beginPath();
+      labelCtx.roundRect(8, 8, 496, 80, 38);
+      labelCtx.fill();
+      labelCtx.font = '600 38px -apple-system, BlinkMacSystemFont, sans-serif';
+      labelCtx.textAlign = 'center';
+      labelCtx.textBaseline = 'middle';
+      labelCtx.fillStyle = '#f6efdf';
+      labelCtx.fillText(displayName.trim().slice(0, 18) || '순례자', 256, 48, 460);
     }
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
     labelTexture.colorSpace = THREE.SRGBColorSpace;
     const nameLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, transparent: true, depthWrite: false }));
-    nameLabel.scale.set(1.35, 0.29, 1);
+    nameLabel.scale.set(0.78, 0.15, 1);
     nameLabel.position.set(0, 2.72, 0);
     avatar.add(nameLabel);
 
+    // Collision-aware movement around the architecture and garden furniture.
+    addBlocker(-11.35, -1, 0.35, 21);
+    addBlocker(11.35, -1, 0.35, 21);
+    addBlocker(0, -22, 11.4, 0.3);
+    addBlocker(-7.3, 19.5, 4.05, 0.3);
+    addBlocker(7.3, 19.5, 4.05, 0.3);
+    for (const z of [-17, -11, -5, 1, 7, 13]) {
+      for (const x of [-8.7, -5.8, 5.8, 8.7]) addBlocker(x, z, 0.35, 0.35);
+    }
+
     const keys = new Set<string>();
     let yaw = 0;
-    let pitch = 0.04;
+    let pitch = 0.12;
+    let cameraDistance = 5.8;
     let dragging = false;
+    let mobileLooking = false;
     let lastX = 0;
     let lastY = 0;
+    let pinchDistance = 0;
     let frame = 0;
-    let lastNear = false;
+    let lastNearFont = false;
     const clock = new THREE.Clock();
     const cameraTarget = new THREE.Vector3();
     const lookTarget = new THREE.Vector3();
-    const holyFont = scene.getObjectByName('holy-water-font');
 
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -385,36 +517,82 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
     };
     const onKeyUp = (event: KeyboardEvent) => keys.delete(event.key.toLowerCase());
     const onBlur = () => keys.clear();
+
+    const onMouseMove = (event: MouseEvent) => {
+      if (document.pointerLockElement === host) {
+        yaw += event.movementX * 0.0023;
+        pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.0018, -0.28, 0.48);
+      } else if (dragging) {
+        yaw += (event.clientX - lastX) * 0.004;
+        pitch = THREE.MathUtils.clamp(pitch - (event.clientY - lastY) * 0.003, -0.28, 0.48);
+        lastX = event.clientX;
+        lastY = event.clientY;
+      }
+    };
     const onPointerDown = (event: PointerEvent) => {
-      dragging = true;
-      lastX = event.clientX;
-      lastY = event.clientY;
+      if (event.pointerType === 'touch') {
+        const bounds = host.getBoundingClientRect();
+        mobileLooking = event.clientX > bounds.left + bounds.width * 0.42;
+        lastX = event.clientX;
+        lastY = event.clientY;
+      } else if (event.button === 0) {
+        dragging = true;
+        lastX = event.clientX;
+        lastY = event.clientY;
+      }
     };
-    const onPointerMove = (event: PointerEvent) => {
-      if (!dragging) return;
-      yaw = THREE.MathUtils.clamp(yaw - (event.clientX - lastX) * 0.004, -1.3, 1.3);
-      pitch = THREE.MathUtils.clamp(pitch + (event.clientY - lastY) * 0.002, -0.14, 0.28);
-      lastX = event.clientX;
-      lastY = event.clientY;
+    const onPointerUp = () => {
+      dragging = false;
+      mobileLooking = false;
     };
-    const onPointerUp = () => { dragging = false; };
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        pinchDistance = Math.hypot(
+          event.touches[0].clientX - event.touches[1].clientX,
+          event.touches[0].clientY - event.touches[1].clientY,
+        );
+      }
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        event.preventDefault();
+        const next = Math.hypot(
+          event.touches[0].clientX - event.touches[1].clientX,
+          event.touches[0].clientY - event.touches[1].clientY,
+        );
+        if (pinchDistance > 0) cameraDistance = THREE.MathUtils.clamp(cameraDistance + (pinchDistance - next) * 0.018, 4.0, 17.0);
+        pinchDistance = next;
+      }
+    };
+    const onTouchEnd = () => { pinchDistance = 0; };
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      pitch = THREE.MathUtils.clamp(pitch + event.deltaY * 0.0003, -0.14, 0.28);
+      cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.008, 3.8, 18.0);
     };
     const onResize = () => {
       camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
       camera.updateProjectionMatrix();
       renderer.setSize(host.clientWidth, host.clientHeight);
     };
+    const onHostClick = () => {
+      if (window.matchMedia('(pointer: fine)').matches && document.pointerLockElement !== host) {
+        void host.requestPointerLock?.();
+      }
+    };
+    const onPointerLockChange = () => setPointerLocked(document.pointerLockElement === host);
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('resize', onResize);
+    document.addEventListener('pointerlockchange', onPointerLockChange);
     host.addEventListener('pointerdown', onPointerDown);
-    host.addEventListener('pointermove', onPointerMove);
+    host.addEventListener('click', onHostClick);
+    host.addEventListener('touchstart', onTouchStart, { passive: true });
+    host.addEventListener('touchmove', onTouchMove, { passive: false });
+    host.addEventListener('touchend', onTouchEnd);
     host.addEventListener('wheel', onWheel, { passive: false });
 
     const animate = () => {
@@ -423,16 +601,21 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
       const forward = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
       const sideways = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
       const moving = Math.abs(forward) + Math.abs(sideways) > 0;
+      const oldX = avatar.position.x;
+      const oldZ = avatar.position.z;
       if (moving) {
         const length = Math.hypot(forward, sideways) || 1;
-        const dx = Math.sin(yaw) * (forward / length) + Math.cos(yaw) * (sideways / length);
-        const dz = -Math.cos(yaw) * (forward / length) + Math.sin(yaw) * (sideways / length);
-        avatar.position.x = THREE.MathUtils.clamp(avatar.position.x + dx * delta * 3.05, chapel ? -8.2 : -9.5, chapel ? 8.2 : 9.5);
-        avatar.position.z = THREE.MathUtils.clamp(avatar.position.z + dz * delta * 3.05, -17.5, 11.5);
+        const f = forward / length;
+        const s = sideways / length;
+        const dx = Math.sin(yaw) * f + Math.cos(yaw) * s;
+        const dz = -Math.cos(yaw) * f + Math.sin(yaw) * s;
+        const nextX = THREE.MathUtils.clamp(oldX + dx * delta * 4.3, -19.5, 19.5);
+        const nextZ = THREE.MathUtils.clamp(oldZ + dz * delta * 4.3, -22.5, 66);
+        if (!collides(nextX, oldZ)) avatar.position.x = nextX;
+        if (!collides(avatar.position.x, nextZ)) avatar.position.z = nextZ;
         avatar.rotation.y = Math.atan2(dx, -dz);
       }
-
-      const gait = moving ? Math.sin(clock.elapsedTime * 10.2) * 0.48 : 0;
+      const gait = moving ? Math.sin(clock.elapsedTime * 11.5) * 0.5 : 0;
       leftLeg.rotation.x = gait;
       rightLeg.rotation.x = -gait;
       leftArm.rotation.x = -gait * 0.42;
@@ -458,25 +641,26 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
         rightArm.rotation.z = 0;
       }
 
+      const followHeight = 2.15 + pitch * 2.6;
       cameraTarget.set(
-        avatar.position.x + Math.sin(yaw) * 5.35,
-        3.15 + pitch * 3.4,
-        avatar.position.z + Math.cos(yaw) * 5.35,
+        avatar.position.x - Math.sin(yaw) * cameraDistance,
+        followHeight + Math.max(0, cameraDistance - 5.8) * 0.16,
+        avatar.position.z + Math.cos(yaw) * cameraDistance,
       );
-      camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 5));
-      lookTarget.set(avatar.position.x, 1.08, avatar.position.z - 0.8);
+      camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 8));
+      lookTarget.set(avatar.position.x, 1.25 + pitch * 0.55, avatar.position.z - 0.25);
       camera.lookAt(lookTarget);
 
-      if (holyFont) {
-        const distance = Math.hypot(avatar.position.x - holyFont.position.x, avatar.position.z - holyFont.position.z);
-        const near = chapel && distance < 2.15;
-        if (near !== lastNear) { lastNear = near; setNearFont(near); }
-        const data = holyFont.userData as { halo?: THREE.Mesh; glow?: THREE.PointLight; waterTop?: THREE.Mesh };
-        if (data.halo) (data.halo.material as THREE.MeshBasicMaterial).opacity = near ? 0.92 : 0.48;
-        if (data.glow) data.glow.intensity = near ? 3 : 1.8;
-        if (data.waterTop) data.waterTop.rotation.z = Math.sin(clock.elapsedTime * 0.9) * 0.015;
+      const fontDistance = Math.hypot(avatar.position.x + 2.2, avatar.position.z - 12);
+      const near = fontDistance < 2.2;
+      if (near !== lastNearFont) {
+        lastNearFont = near;
+        setNearFont(near);
       }
-
+      (fontHalo.material as THREE.MeshBasicMaterial).opacity = near ? 0.9 : 0.38;
+      fontLight.intensity = near ? 2.5 : 1.3;
+      waterSurface.rotation.z = Math.sin(clock.elapsedTime * 0.9) * 0.018;
+      fountainWater.position.y = 2.05 + Math.sin(clock.elapsedTime * 1.6) * 0.035;
       renderer.render(scene, camera);
     };
     onResize();
@@ -484,26 +668,37 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
 
     return () => {
       cancelAnimationFrame(frame);
+      if (document.pointerLockElement === host) document.exitPointerLock();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('resize', onResize);
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
       host.removeEventListener('pointerdown', onPointerDown);
-      host.removeEventListener('pointermove', onPointerMove);
+      host.removeEventListener('click', onHostClick);
+      host.removeEventListener('touchstart', onTouchStart);
+      host.removeEventListener('touchmove', onTouchMove);
+      host.removeEventListener('touchend', onTouchEnd);
       host.removeEventListener('wheel', onWheel);
       scene.traverse(object => {
-        if (object instanceof THREE.Mesh) object.geometry.dispose();
         if (object instanceof THREE.Mesh || object instanceof THREE.Sprite) {
+          if (object instanceof THREE.Mesh) object.geometry.dispose();
           const materials = Array.isArray(object.material) ? object.material : [object.material];
-          materials.forEach(item => item.dispose());
+          materials.forEach(material => material.dispose());
+        }
+      });
+      scene.traverse(object => {
+        if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshStandardMaterial && object.material.map) {
+          object.material.map.dispose();
         }
       });
       labelTexture.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
-  }, [space, displayName]);
+  }, [displayName]);
 
   const dip = () => {
     gesture.current = 'dip';
@@ -515,10 +710,12 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
     gestureAt.current = performance.now();
     setStep('done');
   };
+  const dispatchKey = (key: string, type: 'keydown' | 'keyup') =>
+    window.dispatchEvent(new KeyboardEvent(type, { key }));
 
   return (
     <div className="immersive-avatar-stage">
-      <div ref={hostRef} className="immersive-avatar-canvas" aria-label={space === 'chapel' ? '3D 성당 내부와 이동 가능한 아바타' : '3D 정원과 이동 가능한 아바타'} />
+      <div ref={hostRef} className="immersive-avatar-canvas" aria-label="하나로 이어진 3D 성당과 정원. 클릭 후 WASD로 이동하고 마우스로 시점을 조작하세요." />
       {nearFont && step !== 'done' ? (
         <div className="holy-water-actions" role="group" aria-label="성수대 액션">
           <span aria-hidden="true">{step === 'water' ? '✧' : '✝'}</span>
@@ -528,14 +725,16 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
           <button type="button" className="holy-water-skip" onClick={() => setStep('done')}>건너뛰기</button>
         </div>
       ) : null}
-      <div className="touch-pad avatar-touch-pad" aria-label="아바타 이동">
-        <button type="button" aria-label="앞으로" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))}>▲</button>
+      {!pointerLocked ? <div className="fps-control-hint">클릭 후 WASD · 마우스 시점 · 휠 줌</div> : null}
+      <div className="touch-pad avatar-touch-pad" aria-label="이동 조작">
+        <button type="button" aria-label="앞으로" onPointerDown={event => { event.preventDefault(); dispatchKey('w', 'keydown'); }} onPointerUp={() => dispatchKey('w', 'keyup')} onPointerLeave={() => dispatchKey('w', 'keyup')} onPointerCancel={() => dispatchKey('w', 'keyup')}>▲</button>
         <div>
-          <button type="button" aria-label="왼쪽" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))}>◀</button>
-          <button type="button" aria-label="뒤로" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))}>▼</button>
-          <button type="button" aria-label="오른쪽" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))}>▶</button>
+          <button type="button" aria-label="왼쪽" onPointerDown={event => { event.preventDefault(); dispatchKey('a', 'keydown'); }} onPointerUp={() => dispatchKey('a', 'keyup')} onPointerLeave={() => dispatchKey('a', 'keyup')} onPointerCancel={() => dispatchKey('a', 'keyup')}>◀</button>
+          <button type="button" aria-label="뒤로" onPointerDown={event => { event.preventDefault(); dispatchKey('s', 'keydown'); }} onPointerUp={() => dispatchKey('s', 'keyup')} onPointerLeave={() => dispatchKey('s', 'keyup')} onPointerCancel={() => dispatchKey('s', 'keyup')}>▼</button>
+          <button type="button" aria-label="오른쪽" onPointerDown={event => { event.preventDefault(); dispatchKey('d', 'keydown'); }} onPointerUp={() => dispatchKey('d', 'keyup')} onPointerLeave={() => dispatchKey('d', 'keyup')} onPointerCancel={() => dispatchKey('d', 'keyup')}>▶</button>
         </div>
       </div>
+      <div className="camera-touch-hint" aria-hidden="true">화면 오른쪽 드래그 · 두 손가락 줌</div>
     </div>
   );
 }
