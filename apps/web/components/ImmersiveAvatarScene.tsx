@@ -1142,6 +1142,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       setRoute(goalX, goalZ);
       pendingSeat = null;
       pendingAction = null;
+      pendingGesture = null;
       if (!wasSitting) gesture.current = 'idle';
       rosary.visible = false;
       setActionNotice('목표 지점으로 이동합니다.');
@@ -1198,6 +1199,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         if (!free.length) { setActionNotice('비어 있는 자리가 없습니다.'); return; }
         pendingSeat = free[0].index;
         pendingAction = null;
+        pendingGesture = null;
         const routed = setRoute(free[0].position.x, free[0].position.z);
         if (!routed) { pendingSeat = null; setActionNotice('자리까지 이동할 수 있는 통로를 찾지 못했습니다.'); return; }
         gesture.current = 'idle'; rosary.visible = false;
@@ -1207,7 +1209,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (action === 'mary') {
         const wasSitting = isSitting;
         if (wasSitting) standUp();
-        pendingSeat = null; pendingAction = 'kneel';
+        pendingSeat = null; pendingGesture = null; pendingAction = 'kneel';
         const routed = setRoute(13.15, 49.5);
         if (!routed) {
           pendingAction = null;
@@ -1221,6 +1223,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
       if (action === 'rosary') {
         if (gesture.current === 'rosary') {
+          pendingGesture = null;
           gesture.current = 'idle'; rosary.visible = false;
           setActionNotice('묵주기도를 마쳤습니다.');
         } else {
@@ -1235,7 +1238,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
             leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
             leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
           }
-          movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
+          movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
           gesture.current = 'rosary'; gestureAt.current = performance.now();
           rosary.visible = true;
           setActionNotice('50개의 작은 묵주알과 다섯 개의 큰 묵주알을 따라 기도합니다. 다시 누르면 마칩니다.');
@@ -1260,7 +1263,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
         leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
       }
-      movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
+      movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
       rosary.visible = false;
       if (['cross','prayer','bow','greet'].includes(action)) {
         gesture.current = action as 'cross'|'prayer'|'bow'|'greet';
@@ -1327,7 +1330,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       const oldX = avatar.position.x, oldZ = avatar.position.z;
       let moveX = 0, moveZ = 0, moving = false;
       if (manualMoving) {
-        movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null;
+        movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
         if (isSitting) {
           standUp();
         } else if (gesture.current !== 'idle' && gesture.current !== 'stand') {
