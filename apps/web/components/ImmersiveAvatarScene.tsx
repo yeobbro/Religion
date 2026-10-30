@@ -112,10 +112,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     // Actual photographs licensed for reuse: nave (CC BY-SA 4.0), grotto (CC BY 4.0),
     // marble floor (CC0), vaulted ceiling (CC0), and cathedral facade (CC BY-SA 4.0).
     const cathedralInteriorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Interior_of_St._Vitus_Cathedral%2C_Nave%2C_Prague_20160809_1.jpg/1280px-Interior_of_St._Vitus_Cathedral%2C_Nave%2C_Prague_20160809_1.jpg');
-    const maryShrinePhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/The_Lourdes_Grotto.jpg/1280px-The_Lourdes_Grotto.jpg');
+    const maryShrinePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/EstatuaGrutadeLourdes-MDP.jpg?width=1280');
     const marbleFloorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Milan_Cathedral%2C_floor.jpg/1280px-Milan_Cathedral%2C_floor.jpg');
     const vaultedCeilingPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Gloucester_Cathedral_Vaulted_Ceiling.jpg/1356px-Gloucester_Cathedral_Vaulted_Ceiling.jpg');
-    const exteriorFacadePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Notre_Dame_Cathedral_Facade.jpg?width=1600');
+    const exteriorFacadePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Gloucester_Cathedral_exterior_front.jpg?width=1800');
     const courtyardPhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Gloucester_Cathedral_courtyard.JPG?width=1600');
     for (const texture of [cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto, courtyardPhoto]) {
       texture.colorSpace = THREE.SRGBColorSpace;
@@ -1732,12 +1732,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       <div className="camera-touch-hint" aria-hidden="true">화면 드래그로 시점 변경 · 두 손가락 줌</div>
       <div className="world-asset-credit">
         실제 성당 사진 자료 ·
-        <a href="https://commons.wikimedia.org/wiki/File:Notre_Dame_Cathedral_Facade.jpg" target="_blank" rel="noreferrer">정면 Marlaazriel · CC BY-SA 4.0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_exterior_front.jpg" target="_blank" rel="noreferrer">정면 Saffron Blaze · CC BY-SA 3.0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:Interior_of_St._Vitus_Cathedral,_Nave,_Prague_20160809_1.jpg" target="_blank" rel="noreferrer">내부 DXR · CC BY-SA 4.0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_Vaulted_Ceiling.jpg" target="_blank" rel="noreferrer">천장 Zhurakovskyi · CC0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:Milan_Cathedral,_floor.jpg" target="_blank" rel="noreferrer">바닥 Gerda Arendt · CC0</a> ·
         <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_courtyard.JPG" target="_blank" rel="noreferrer">외부 정원 Fæ · CC BY-SA 3.0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:The_Lourdes_Grotto.jpg" target="_blank" rel="noreferrer">성모 기도처 ELeibiger · CC BY 4.0</a>
+        <a href="https://commons.wikimedia.org/wiki/File:EstatuaGrutadeLourdes-MDP.jpg" target="_blank" rel="noreferrer">성모상 Ezarate · CC BY-SA 4.0</a>
       </div>
     </div>
   );
