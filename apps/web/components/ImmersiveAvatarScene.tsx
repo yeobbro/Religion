@@ -541,6 +541,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         lastY = event.clientY;
       }
     };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!mobileLooking || event.pointerType !== 'touch') return;
+      yaw += (event.clientX - lastX) * 0.006;
+      pitch = THREE.MathUtils.clamp(pitch - (event.clientY - lastY) * 0.004, -0.28, 0.48);
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
     const onPointerUp = () => {
       dragging = false;
       mobileLooking = false;
@@ -589,6 +596,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     window.addEventListener('resize', onResize);
     document.addEventListener('pointerlockchange', onPointerLockChange);
     host.addEventListener('pointerdown', onPointerDown);
+    host.addEventListener('pointermove', onPointerMove);
     host.addEventListener('click', onHostClick);
     host.addEventListener('touchstart', onTouchStart, { passive: true });
     host.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -677,6 +685,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       window.removeEventListener('resize', onResize);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       host.removeEventListener('pointerdown', onPointerDown);
+      host.removeEventListener('pointermove', onPointerMove);
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('touchstart', onTouchStart);
       host.removeEventListener('touchmove', onTouchMove);
