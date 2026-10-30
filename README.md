@@ -4,7 +4,6 @@ A shared online prayer space for parish communities, beginning with a Catholic e
 
 ## Current milestone
 - Prayer candles with written intentions and a public/private choice.
-- Parish-wide shared rosary decade counter, with a Supabase-backed contribution ledger and realtime updates when configured.
 - Gregorian chant player with playback controls. Audio is supplied by the deployment through `NEXT_PUBLIC_GREGORIAN_AUDIO_URL`; only recordings with verified usage rights should be used.
 
 ## Run locally
@@ -16,7 +15,7 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev
 ```
 
-Without Supabase credentials, the UI runs in local demo mode. Demo contributions are stored in the current browser only and are not shared across devices. Configure Supabase, enable **Anonymous Sign-Ins** under Authentication → Providers, and apply `supabase/migrations/0001_prayer_community.sql` to enable shared persistence and realtime updates. Create a row in `public.parishes`, then set `NEXT_PUBLIC_PARISH_ID` to that row's UUID. Anonymous sessions let visitors contribute without a full account; production deployments should add abuse controls (rate limits / CAPTCHA) and a parish-admin moderation workflow.
+Without Supabase credentials, the UI runs in local demo mode. Demo contributions are stored in the current browser only and are not shared across devices. Configure Supabase, enable **Anonymous Sign-Ins** under Authentication → Providers, and apply `supabase/migrations/0001_prayer_community.sql` to enable candle offerings and the public prayer-intention feed. Create a row in `public.parishes`, then set `NEXT_PUBLIC_PARISH_ID` to that row's UUID. Anonymous sessions let visitors contribute without a full account; production deployments should add abuse controls (rate limits / CAPTCHA) and a parish-admin moderation workflow. Shared parish rosary totals are intentionally deferred to a later milestone.
 
 ## Environment
 - `NEXT_PUBLIC_SUPABASE_URL`
