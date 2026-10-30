@@ -1006,10 +1006,14 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       leftArm.rotation.z = 0; rightArm.rotation.z = 0; head.rotation.x = 0;
 
       if (gesture.current === 'sit') {
-        avatar.position.y = 0.2;
-        leftLeg.rotation.x = -0.95; rightLeg.rotation.x = -0.95;
-        leftArm.rotation.x = -0.18; rightArm.rotation.x = -0.18;
-        head.rotation.x = 0.08;
+        const sitProgress = Math.min(1, (performance.now() - gestureAt.current) / 720);
+        const sitEase = sitProgress * sitProgress * (3 - 2 * sitProgress);
+        avatar.position.y = 0.2 * sitEase;
+        leftLeg.rotation.x = -0.95 * sitEase;
+        rightLeg.rotation.x = -0.95 * sitEase;
+        leftArm.rotation.x = -0.18 * sitEase;
+        rightArm.rotation.x = -0.18 * sitEase;
+        head.rotation.x = 0.08 * sitEase;
       } else if (gesture.current === 'rosary') {
         leftArm.rotation.x = -0.92; rightArm.rotation.x = -0.92;
         leftArm.rotation.z = 0.18; rightArm.rotation.z = -0.18;
