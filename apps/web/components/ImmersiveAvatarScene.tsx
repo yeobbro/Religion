@@ -180,6 +180,7 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
 
       // Holy-water font near the entrance.
       const font = new THREE.Group();
+      font.name = 'holy-water-font';
       font.position.set(-1.65, 0, 3.45);
       environment.add(font);
       addCylinder(font, 0.43, 0.5, 0.18, gold, 0, 0.09, 0, 24);
@@ -492,8 +493,8 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
       host.removeEventListener('pointermove', onPointerMove);
       host.removeEventListener('wheel', onWheel);
       scene.traverse(object => {
+        if (object instanceof THREE.Mesh) object.geometry.dispose();
         if (object instanceof THREE.Mesh || object instanceof THREE.Sprite) {
-          object.geometry?.dispose();
           const materials = Array.isArray(object.material) ? object.material : [object.material];
           materials.forEach(item => item.dispose());
         }
@@ -532,7 +533,7 @@ export default function ImmersiveAvatarScene({ space, displayName }: Props) {
         <div>
           <button type="button" aria-label="왼쪽" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))}>◀</button>
           <button type="button" aria-label="뒤로" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))}>▼</button>
-          <button type="button" aria-label="오른쪽" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))}>▶</button>
+          <button type="button" aria-label="오른쪽" onPointerDown={event => { event.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))}>▶</button>
         </div>
       </div>
     </div>
