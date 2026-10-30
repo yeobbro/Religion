@@ -21,7 +21,7 @@ Without Supabase credentials, the UI runs in local demo mode. Demo contributions
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_PARISH_ID` — UUID of a row in `public.parishes`.
-- `NEXT_PUBLIC_GREGORIAN_AUDIO_URL` — URL to a properly licensed audio recording.
+- `NEXT_PUBLIC_GREGORIAN_AUDIO_URL` — optional URL override; by default the player uses the public-domain `Veni Sancte Spiritus` recording by Membeth from Wikimedia Commons.
 
 ## Privacy and pastoral boundaries
 - Prayer intentions are private by default. Public intentions are shown only after the user opts in.
@@ -32,3 +32,7 @@ Without Supabase credentials, the UI runs in local demo mode. Demo contributions
 - `apps/web`: Next.js experience
 - `supabase/migrations`: persistence and access policies
 - Future: Colyseus multiplayer server, 3D spaces, avatars, and religion-specific modules.
+
+
+## Gregorian chant audio credit
+The default player audio is **Veni Sancte Spiritus (Gregorian chant)**, recorded and released into the public domain by Membeth. [Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:Veni.sancte.spiritus.ogg). The chant is the Pentecost sequence; replace the default URL with another appropriately licensed recording if a different liturgical season or repertoire is desired.
