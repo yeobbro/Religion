@@ -21,18 +21,8 @@ create table if not exists public.prayer_intentions (
   expires_at timestamptz not null default (now() + interval '30 days')
 );
 
-create table if not exists public.rosary_contributions (
-  id uuid primary key default gen_random_uuid(),
-  parish_id uuid not null references public.parishes(id) on delete cascade,
-  user_id uuid references auth.users(id) on delete set null,
-  decades integer not null check (decades between 1 and 20),
-  created_at timestamptz not null default now()
-);
-
 create index if not exists prayer_intentions_parish_created_idx
   on public.prayer_intentions (parish_id, created_at desc) where is_public = true;
-create index if not exists rosary_contributions_parish_created_idx
-  on public.rosary_contributions (parish_id, created_at desc);
 
 alter table public.parishes enable row level security;
 alter table public.prayer_intentions enable row level security;
@@ -40,16 +30,13 @@ alter table public.rosary_contributions enable row level security;
 
 -- Public parish metadata and public intentions can be read by visitors.
 create policy "parishes are readable" on public.parishes for select using (true);
+drop policy if exists "public intentions are readable" on public.prayer_intentions;
 create policy "public intentions are readable" on public.prayer_intentions
-  for select using (is_public = true);
+  for select using (is_public = true and expires_at > now());
 -- Authenticated users may submit intentions only as themselves.
+drop policy if exists "users submit own intentions" on public.prayer_intentions;
 create policy "users submit own intentions" on public.prayer_intentions
   for insert to authenticated with check (author_id = auth.uid());
--- Contribution rows are readable for aggregate community progress.
-create policy "rosary contributions are readable" on public.rosary_contributions
-  for select using (true);
-create policy "users submit own rosary contributions" on public.rosary_contributions
-  for insert to authenticated with check (user_id = auth.uid());
 
--- Enable Realtime for the shared rosary ledger.
-alter publication supabase_realtime add table public.rosary_contributions;
+-- Realtime is used only for public prayer intentions; private intentions are never broadcast.
+alter publication supabase_realtime add table public.prayer_intentions;
