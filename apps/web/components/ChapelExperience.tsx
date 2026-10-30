@@ -26,7 +26,9 @@ export default function ChapelExperience() {
   const [volume, setVolume] = useState(0.35);
   const [space, setSpace] = useState<'chapel' | 'garden'>('chapel');
   const [immersive, setImmersive] = useState(false);
-  const room = useReligionRoom(space);
+  const [baptismalName, setBaptismalName] = useState('');
+  const [entryNotice, setEntryNotice] = useState('');
+  const room = useReligionRoom(space, baptismalName, immersive);
   const [quietSeconds, setQuietSeconds] = useState(180);
   const [quietRunning, setQuietRunning] = useState(false);
 
@@ -133,6 +135,11 @@ export default function ChapelExperience() {
   };
 
   const enterImmersive = () => {
+    if (!baptismalName.trim()) {
+      setEntryNotice('입장할 세례명을 입력해 주세요.');
+      return;
+    }
+    setEntryNotice('');
     setImmersive(true);
     if (document.fullscreenEnabled && !document.fullscreenElement) {
       void document.documentElement.requestFullscreen().catch(() => undefined);
@@ -155,20 +162,18 @@ export default function ChapelExperience() {
   }, []);
 
   if (immersive) {
-    const photo = space === 'chapel' ? chapelPhotoUrl : gardenPhotoUrl;
     return (
       <main className={`immersive-room ${space === 'chapel' ? 'immersive-chapel' : 'immersive-garden'}`}>
-        <div className="immersive-photo" style={{ backgroundImage: `url("${photo}")` }} />
-        <div className="immersive-shade" />
+
         <header className="immersive-toolbar">
-          <div className="immersive-player" aria-label="Yden avatar"><span className="immersive-avatar-mark">Y</span></div>
+          <div className="immersive-player" aria-label={`${baptismalName} avatar`}><span className="immersive-avatar-mark">{baptismalName.trim().slice(0, 1)}</span></div>
           <div className="immersive-space-switch" aria-label="공간 선택">
             <button type="button" className={space === 'chapel' ? 'active' : ''} onClick={() => setSpace('chapel')}>성당</button>
             <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
           </div>
           <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
         </header>
-        <section className="immersive-world" aria-label={space === 'chapel' ? '성당 체험 공간' : '정원 체험 공간'}><ImmersiveAvatarScene space={space} /></section>
+        <section className="immersive-world" aria-label={space === 'chapel' ? '성당 체험 공간' : '정원 체험 공간'}><ImmersiveAvatarScene space={space} displayName={baptismalName.trim()} /></section>
       </main>
     );
   }
@@ -185,8 +190,26 @@ export default function ChapelExperience() {
             <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
           </div>
           <div className="lobby-bottom">
-            <div className="lobby-avatar-card"><span className="lobby-avatar-mark">Y</span><span><strong>Yden</strong><small>내 아바타 · 입장 준비 완료</small></span></div>
-            <button type="button" className="lobby-enter" onClick={enterImmersive}>내 아바타로 입장 <span>→</span></button>
+            <div className="lobby-entry-profile">
+              <div className="lobby-avatar-card">
+                <span className="lobby-avatar-mark">Y</span>
+                <span><strong>{baptismalName.trim() || '나의 아바타'}</strong><small>입장할 세례명</small></span>
+              </div>
+              <label className="lobby-baptismal-field">
+                <span>세례명</span>
+                <input
+                  value={baptismalName}
+                  onChange={event => { setBaptismalName(event.target.value.slice(0, 18)); setEntryNotice(''); }}
+                  onKeyDown={event => { if (event.key === 'Enter') enterImmersive(); }}
+                  maxLength={18}
+                  placeholder="예: 요셉"
+                  autoComplete="off"
+                  aria-label="입장할 세례명"
+                />
+              </label>
+              {entryNotice ? <p className="lobby-entry-notice" role="alert">{entryNotice}</p> : null}
+            </div>
+            <button type="button" className="lobby-enter" onClick={enterImmersive} disabled={!baptismalName.trim()}>입장하기 <span>→</span></button>
           </div>
           <div className="lobby-photo-credit">{space === 'chapel' ? 'Photo by Georgi Kalaydzhiev' : 'Photo by Shawn Kim'} · Unsplash</div>
         </div>
