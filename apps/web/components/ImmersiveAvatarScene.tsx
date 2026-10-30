@@ -27,8 +27,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     if (!host) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#aebbb4');
-    scene.fog = new THREE.Fog('#aebbb4', 42, 105);
+    scene.background = new THREE.Color('#8f9b91');
+    scene.fog = new THREE.Fog('#8f9b91', 42, 105);
 
     const camera = new THREE.PerspectiveCamera(64, host.clientWidth / Math.max(1, host.clientHeight), 0.1, 220);
     const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true, powerPreference: 'high-performance' });
@@ -36,15 +36,15 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     renderer.setSize(host.clientWidth, host.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 1.02;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor('#aebbb4', 1);
+    renderer.setClearColor('#8f9b91', 1);
     host.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight('#eee7d8', '#404a3b', 2.0);
+    const hemi = new THREE.HemisphereLight('#eee3cf', '#343b32', 1.55);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight('#fff0d4', 2.65);
+    const sun = new THREE.DirectionalLight('#f5e2c4', 2.15);
     sun.position.set(-12, 19, 10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -54,7 +54,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     sun.shadow.camera.bottom = -40;
     sun.shadow.bias = -0.0003;
     scene.add(sun);
-    const fill = new THREE.DirectionalLight('#d5e1d6', 0.9);
+    const fill = new THREE.DirectionalLight('#c4d0c1', 0.58);
     fill.position.set(12, 9, -18);
     scene.add(fill);
 
@@ -439,6 +439,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const sanctuaryLamp = new THREE.PointLight('#ff5b3d', 0.9, 5, 2);
     sanctuaryLamp.position.set(1.25, 3.4, -18.8);
     world.add(sanctuaryLamp);
+    const sanctuaryGlow = new THREE.PointLight('#f4d9ad', 1.35, 19, 2);
+    sanctuaryGlow.position.set(0, 8.2, -15.2);
+    world.add(sanctuaryGlow);
     // Ambo / pulpit with a book.
     addBox(world, 0.95, 1.25, 0.78, wood, -3.4, 0.82, -14.6, true);
     addBox(world, 1.08, 0.12, 0.88, trim, -3.4, 1.5, -14.6);
