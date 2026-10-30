@@ -16,12 +16,12 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev
 ```
 
-Without Supabase credentials, the UI runs in local demo mode. Demo contributions are stored in the current browser only and are not shared across devices. Configure Supabase and apply `supabase/migrations/0001_prayer_community.sql` to enable shared persistence and realtime updates.
+Without Supabase credentials, the UI runs in local demo mode. Demo contributions are stored in the current browser only and are not shared across devices. Configure Supabase, enable **Anonymous Sign-Ins** under Authentication → Providers, and apply `supabase/migrations/0001_prayer_community.sql` to enable shared persistence and realtime updates. Create a row in `public.parishes`, then set `NEXT_PUBLIC_PARISH_ID` to that row's UUID. Anonymous sessions let visitors contribute without a full account; production deployments should add abuse controls (rate limits / CAPTCHA) and a parish-admin moderation workflow.
 
 ## Environment
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_PARISH_ID` — parish UUID after creating a parish row; local demo accepts a slug.
+- `NEXT_PUBLIC_PARISH_ID` — UUID of a row in `public.parishes`.
 - `NEXT_PUBLIC_GREGORIAN_AUDIO_URL` — URL to a properly licensed audio recording.
 
 ## Privacy and pastoral boundaries
