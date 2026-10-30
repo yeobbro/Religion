@@ -1000,7 +1000,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     let movementPath: THREE.Vector3[] = [];
     let pendingSeat: number | null = null, currentSeat: number | null = null;
     let pendingAction: 'prayer' | 'kneel' | null = null;
-    let pendingGesture: 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | null = null;
+    let pendingGesture: 'dip' | 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | null = null;
     let isSitting = false, frame = 0;
     let lastNearFont = false, lastNearMary = false;
     const clock = new THREE.Clock();
@@ -1280,8 +1280,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
       if (isSitting) {
         standUp();
-        pendingGesture = ['cross','prayer','bow','greet'].includes(action)
-          ? action as 'cross' | 'prayer' | 'bow' | 'greet'
+        pendingGesture = ['dip','cross','prayer','bow','greet'].includes(action)
+          ? action as 'dip' | 'cross' | 'prayer' | 'bow' | 'greet'
           : null;
         setActionNotice('먼저 자리에서 천천히 일어납니다.');
         return;
@@ -1293,12 +1293,15 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
       movementTarget = null; movementPath = []; pendingSeat = null; pendingAction = null; pendingGesture = null;
       rosary.visible = false;
-      if (['cross','prayer','bow','greet'].includes(action)) {
-        gesture.current = action as 'cross'|'prayer'|'bow'|'greet';
+      if (['dip','cross','prayer','bow','greet'].includes(action)) {
+        gesture.current = action as 'dip'|'cross'|'prayer'|'bow'|'greet';
         gestureAt.current = performance.now();
         const messages: Record<string,string> = {
-          cross:'이마 → 가슴 → 왼쪽 어깨 → 오른쪽 어깨 순서로 성호경을 긋습니다.', prayer:'두 손을 모아 기도합니다.',
-          bow:'정중하게 목례합니다.', greet:'손을 들어 인사합니다.'
+          dip:'성수에 손을 적시고 성호를 그을 준비를 합니다.',
+          cross:'이마 → 가슴 → 왼쪽 어깨 → 오른쪽 어깨 순서로 성호경을 긋습니다.',
+          prayer:'두 손을 모아 기도합니다.',
+          bow:'정중하게 목례합니다.',
+          greet:'손을 들어 인사합니다.'
         };
         setActionNotice(messages[action]);
       }
@@ -1664,13 +1667,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
   }, [displayName]);
 
   const dip = () => {
-    gesture.current = 'dip';
-    gestureAt.current = performance.now();
+    dispatchWorldAction('dip');
     setStep('cross');
   };
   const sign = () => {
-    gesture.current = 'cross';
-    gestureAt.current = performance.now();
+    dispatchWorldAction('cross');
     setStep('done');
   };
   const dispatchWorldAction = (action: string) =>
