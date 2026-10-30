@@ -701,21 +701,29 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       palm.scale.set(0.78, 0.62, 0.42);
       palm.position.y = -0.025;
       hand.add(palm);
+      const fingers: THREE.Group[] = [];
       for (let finger = 0; finger < 4; finger += 1) {
         const width = (finger - 1.5) * 0.044;
         const length = [0.13, 0.16, 0.15, 0.12][finger];
-        const digit = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, length, 3, 8), skin);
-        digit.position.set(width, -0.105 - length * 0.28, -0.005);
-        digit.rotation.z = (finger - 1.5) * 0.07;
+        const joint = new THREE.Group();
+        joint.position.set(width, -0.055, -0.005);
+        hand.add(joint);
+        const digit = new THREE.Mesh(new THREE.CapsuleGeometry(0.019, length, 3, 8), skin);
+        digit.position.y = -length * 0.43;
+        digit.rotation.z = (finger - 1.5) * 0.055;
         digit.castShadow = true;
-        hand.add(digit);
+        joint.add(digit);
+        fingers.push(joint);
       }
-      const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.105, 3, 8), skin);
+      const thumb = new THREE.Group();
       thumb.position.set(side * 0.105, -0.055, -0.012);
-      thumb.rotation.z = side * -0.72;
-      thumb.castShadow = true;
       hand.add(thumb);
-      return { upper, forearm, hand };
+      const thumbDigit = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.105, 3, 8), skin);
+      thumbDigit.position.y = -0.055;
+      thumbDigit.rotation.z = side * -0.72;
+      thumbDigit.castShadow = true;
+      thumb.add(thumbDigit);
+      return { upper, forearm, hand, fingers, thumb };
     };
     const leftArmRig = makeArm(-0.39, -1);
     const rightArmRig = makeArm(0.39, 1);
@@ -725,22 +733,40 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const rightForearm = rightArmRig.forearm;
     const leftHand = leftArmRig.hand;
     const rightHand = rightArmRig.hand;
+    const leftFingers = leftArmRig.fingers;
+    const rightFingers = rightArmRig.fingers;
+    const leftThumb = leftArmRig.thumb;
+    const rightThumb = rightArmRig.thumb;
+
     const makeLeg = (x: number) => {
-      const pivot = new THREE.Group();
-      pivot.position.set(x, 0.88, 0);
-      avatar.add(pivot);
-      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.56, 4, 10), trousers);
-      body.position.y = -0.34;
-      body.castShadow = true;
-      pivot.add(body);
+      const hip = new THREE.Group();
+      hip.position.set(x, 0.88, 0);
+      avatar.add(hip);
+      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.3, 5, 10), trousers);
+      thigh.position.y = -0.19;
+      thigh.castShadow = true;
+      hip.add(thigh);
+
+      const knee = new THREE.Group();
+      knee.position.y = -0.39;
+      hip.add(knee);
+      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.27, 5, 10), trousers);
+      shin.position.y = -0.17;
+      shin.castShadow = true;
+      knee.add(shin);
       const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.38), shoes);
-      shoe.position.set(0, -0.72, -0.09);
+      shoe.position.set(0, -0.34, -0.075);
       shoe.castShadow = true;
-      pivot.add(shoe);
-      return pivot;
+      knee.add(shoe);
+      return { hip, knee };
     };
-    const leftLeg = makeLeg(-0.16);
-    const rightLeg = makeLeg(0.16);
+    const leftLegRig = makeLeg(-0.16);
+    const rightLegRig = makeLeg(0.16);
+    const leftLeg = leftLegRig.hip;
+    const rightLeg = rightLegRig.hip;
+    const leftKnee = leftLegRig.knee;
+    const rightKnee = rightLegRig.knee;
+
 
     // Small, unobtrusive baptismal-name plaque above the avatar.
     const labelCanvas = document.createElement('canvas');
@@ -957,6 +983,11 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         }
         return;
       }
+      if (action === 'prayer' && gesture.current === 'prayer') {
+        gesture.current = 'idle';
+        setActionNotice('기도를 마쳤습니다.');
+        return;
+      }
       if (isSitting) standUp();
       movementTarget = null; pendingSeat = null; pendingAction = null;
       rosary.visible = false;
@@ -1031,6 +1062,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         } else if (gesture.current !== 'idle' && gesture.current !== 'stand') {
           gesture.current = 'idle';
           avatar.position.y = 0;
+          torso.rotation.x = 0;
+          leftLeg.rotation.x = 0; rightLeg.rotation.x = 0;
+          leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
           rosary.visible = false;
         }
         const length = Math.hypot(forward, sideways) || 1;
@@ -1074,13 +1108,20 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
 
       const gait = moving ? Math.sin(clock.elapsedTime*11.5)*0.5 : 0;
-      if (gesture.current !== 'sit') {
-        leftLeg.rotation.x = gait; rightLeg.rotation.x = -gait;
+      if (gesture.current !== 'sit' && gesture.current !== 'kneel') {
+        leftLeg.rotation.x = gait;
+        rightLeg.rotation.x = -gait;
+        leftKnee.rotation.x = Math.max(0, gait) * 0.34;
+        rightKnee.rotation.x = Math.max(0, -gait) * 0.34;
       }
       leftArm.rotation.x = -gait*0.42; rightArm.rotation.x = gait*0.42;
       leftArm.rotation.z = 0; rightArm.rotation.z = 0;
       leftForearm.rotation.set(0,0,0); rightForearm.rotation.set(0,0,0);
       leftHand.rotation.set(0,0,0); rightHand.rotation.set(0,0,0);
+      leftFingers.forEach(finger => finger.rotation.set(0,0,0));
+      rightFingers.forEach(finger => finger.rotation.set(0,0,0));
+      leftThumb.rotation.set(0,0,0); rightThumb.rotation.set(0,0,0);
+      leftKnee.rotation.x = 0; rightKnee.rotation.x = 0;
       head.rotation.x = 0; torso.rotation.x = 0;
 
 
@@ -1089,12 +1130,16 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const sitEase = sitProgress * sitProgress * (3 - 2 * sitProgress);
         avatar.position.y = 0.06 * sitEase;
         torso.rotation.x = -0.045 * sitEase;
-        leftLeg.rotation.x = -1.18 * sitEase;
-        rightLeg.rotation.x = -1.18 * sitEase;
+        leftLeg.rotation.x = 1.18 * sitEase;
+        rightLeg.rotation.x = 1.18 * sitEase;
+        leftKnee.rotation.x = -1.12 * sitEase;
+        rightKnee.rotation.x = -1.12 * sitEase;
         leftArm.rotation.x = -0.08 * sitEase;
         rightArm.rotation.x = -0.08 * sitEase;
         leftForearm.rotation.x = -0.22 * sitEase;
         rightForearm.rotation.x = -0.22 * sitEase;
+        leftFingers.forEach(finger => { finger.rotation.z = 0.035; });
+        rightFingers.forEach(finger => { finger.rotation.z = -0.035; });
         head.rotation.x = 0.07 * sitEase;
       } else if (gesture.current === 'dip') {
         const t = Math.min(1, (performance.now() - gestureAt.current) / 980);
@@ -1111,8 +1156,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const remain = 1 - ease;
         avatar.position.y = 0.06 * remain;
         torso.rotation.x = -0.045 * remain;
-        leftLeg.rotation.x = -1.18 * remain;
-        rightLeg.rotation.x = -1.18 * remain;
+        leftLeg.rotation.x = 1.18 * remain;
+        rightLeg.rotation.x = 1.18 * remain;
+        leftKnee.rotation.x = -1.12 * remain;
+        rightKnee.rotation.x = -1.12 * remain;
         leftArm.rotation.x = -0.08 * remain;
         rightArm.rotation.x = -0.08 * remain;
         leftForearm.rotation.x = -0.22 * remain;
@@ -1123,8 +1170,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const ease = t * t * (3 - 2 * t);
         avatar.position.y = -0.22 * ease;
         torso.rotation.x = -0.035 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
-        leftLeg.rotation.x = 1.05 * ease;
-        rightLeg.rotation.x = 1.05 * ease;
+        leftLeg.rotation.x = 0.08 * ease;
+        rightLeg.rotation.x = 0.08 * ease;
+        leftKnee.rotation.x = -1.5 * ease;
+        rightKnee.rotation.x = -1.5 * ease;
         leftArm.rotation.x = 0.78 * ease;
         rightArm.rotation.x = 0.78 * ease;
         leftArm.rotation.z = 0.6 * ease;
@@ -1135,6 +1184,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         rightForearm.rotation.z = 0.13 * ease;
         leftHand.rotation.z = -0.12 * ease;
         rightHand.rotation.z = 0.12 * ease;
+        leftFingers.forEach(finger => { finger.rotation.z = 0.07 * ease; });
+        rightFingers.forEach(finger => { finger.rotation.z = -0.07 * ease; });
+        leftThumb.rotation.z = 0.2 * ease;
+        rightThumb.rotation.z = -0.2 * ease;
         head.rotation.x = 0.18 * ease + Math.sin(clock.elapsedTime * 1.15) * 0.012;
       } else if (gesture.current === 'rosary') {
         leftArm.rotation.x = 0.82; rightArm.rotation.x = 0.82;
@@ -1142,6 +1195,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         leftForearm.rotation.x = 1.18; rightForearm.rotation.x = 1.18;
         leftForearm.rotation.z = -0.13; rightForearm.rotation.z = 0.13;
         leftHand.rotation.z = -0.12; rightHand.rotation.z = 0.12;
+        leftFingers.forEach((finger, index) => { finger.rotation.z = 0.10 + (index - 1.5) * 0.035; });
+        rightFingers.forEach((finger, index) => { finger.rotation.z = -0.10 + (index - 1.5) * 0.035; });
+        leftThumb.rotation.z = 0.25;
+        rightThumb.rotation.z = -0.25;
         head.rotation.x = 0.13;
         rosary.visible = true;
         rosary.rotation.z = Math.sin(clock.elapsedTime * 1.15) * 0.018;
@@ -1175,25 +1232,23 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         head.rotation.x = t < 0.98 ? 0.035 : 0;
         if (t >= 1) gesture.current = 'idle';
       } else if (gesture.current === 'prayer') {
-        const t = Math.min(1, (performance.now() - gestureAt.current) / 3100);
-        const approach = Math.min(1, t / 0.26);
-        const release = t > 0.78 ? (t - 0.78) / 0.22 : 0;
-        const ease = approach * approach * (3 - 2 * approach);
-        const hold = ease * (1 - release * release);
-        const breath = Math.sin(clock.elapsedTime * 1.35) * 0.018 * hold;
-        leftArm.rotation.x = 0.78 * hold + breath;
-        rightArm.rotation.x = 0.78 * hold + breath;
-        leftArm.rotation.z = 0.6 * hold;
-        rightArm.rotation.z = -0.6 * hold;
-        leftForearm.rotation.x = 1.22 * hold;
-        rightForearm.rotation.x = 1.22 * hold;
-        leftForearm.rotation.z = -0.13 * hold;
-        rightForearm.rotation.z = 0.13 * hold;
-        leftHand.rotation.z = -0.12 * hold;
-        rightHand.rotation.z = 0.12 * hold;
-        head.rotation.x = 0.18 * hold;
-        torso.rotation.x = -0.025 * hold + breath;
-        if (t >= 1) gesture.current = 'idle';
+        const breath = Math.sin(clock.elapsedTime * 1.35) * 0.018;
+        leftArm.rotation.x = 0.78 + breath;
+        rightArm.rotation.x = 0.78 + breath;
+        leftArm.rotation.z = 0.6;
+        rightArm.rotation.z = -0.6;
+        leftForearm.rotation.x = 1.22;
+        rightForearm.rotation.x = 1.22;
+        leftForearm.rotation.z = -0.13;
+        rightForearm.rotation.z = 0.13;
+        leftHand.rotation.z = -0.12;
+        rightHand.rotation.z = 0.12;
+        leftFingers.forEach(finger => { finger.rotation.z = 0.07; });
+        rightFingers.forEach(finger => { finger.rotation.z = -0.07; });
+        leftThumb.rotation.z = 0.2;
+        rightThumb.rotation.z = -0.2;
+        head.rotation.x = 0.18 + breath * 0.45;
+        torso.rotation.x = -0.025 + breath * 0.5;
       } else if (gesture.current === 'bow') {
         const t = Math.min(1, (performance.now() - gestureAt.current) / 1500);
         const pulse = Math.sin(t * Math.PI);
