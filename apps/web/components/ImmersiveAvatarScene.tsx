@@ -417,8 +417,25 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     addBox(world, 1.45, 1.25, 0.82, trim, 0, 3.95, -19.8);
     addBox(world, 1.12, 0.82, 0.62, ivory, 0, 3.95, -19.25);
     addMesh(world, new THREE.SphereGeometry(0.48, 20, 14), trim, 0, 4.72, -19.25);
-    addBox(world, 0.2, 6.8, 0.18, trim, 0, 9.0, -21.35);
-    addBox(world, 2.2, 0.22, 0.18, trim, 0, 12.2, -21.35);
+    // Monumental crucifix with a sculpted corpus at the visual center of the sanctuary.
+    addBox(world, 0.34, 8.4, 0.24, darkWood, 0, 8.5, -21.05);
+    addBox(world, 3.25, 0.34, 0.26, darkWood, 0, 10.15, -21.05);
+    const corpusSkin = makeMat('#c6a18b', 0.72, 0.02);
+    const corpusHair = makeMat('#342a26', 0.9);
+    const corpusBody = addMesh(world, new THREE.CapsuleGeometry(0.28, 1.02, 6, 14), corpusSkin, 0, 8.45, -20.72);
+    corpusBody.scale.set(0.82, 1.0, 0.52);
+    addMesh(world, new THREE.SphereGeometry(0.22, 18, 14), corpusSkin, 0, 9.45, -20.70);
+    addMesh(world, new THREE.SphereGeometry(0.235, 18, 12), corpusHair, 0, 9.55, -20.76).scale.set(1, 0.55, 0.9);
+    const corpusLeftArm = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.88, 5, 10), corpusSkin, -0.78, 9.02, -20.72);
+    corpusLeftArm.rotation.z = Math.PI / 2;
+    const corpusRightArm = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.88, 5, 10), corpusSkin, 0.78, 9.02, -20.72);
+    corpusRightArm.rotation.z = -Math.PI / 2;
+    const corpusLeftLeg = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.62, 5, 10), corpusSkin, -0.13, 7.35, -20.71);
+    corpusLeftLeg.rotation.z = -0.08;
+    const corpusRightLeg = addMesh(world, new THREE.CapsuleGeometry(0.105, 0.62, 5, 10), corpusSkin, 0.13, 7.35, -20.71);
+    corpusRightLeg.rotation.z = 0.08;
+    addMesh(world, new THREE.TorusGeometry(0.28, 0.025, 8, 32), trim, 0, 9.55, -20.62).rotation.x = Math.PI / 2;
+    addBlocker(0, -17.1, 6.1, 3.0);
     const sanctuaryLamp = new THREE.PointLight('#ff5b3d', 0.9, 5, 2);
     sanctuaryLamp.position.set(1.25, 3.4, -18.8);
     world.add(sanctuaryLamp);
@@ -438,6 +455,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         addBox(world, 3.55, 0.22, 0.58, wood, x, 0.82, z);
         addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42);
         for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z);
+        addBlocker(x, z, 1.8, 0.48);
       }
     }
 
@@ -497,10 +515,14 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     for (const side of [-1, 1]) {
       const x = side * 13.5;
       for (let z = 25; z <= 50; z += 5) {
-        addBox(world, 0.65, 4.2, 0.65, stone, x, 2.1, z, true);
+        if (!(side === 1 && z === 50)) {
+          addBox(world, 0.65, 4.2, 0.65, stone, x, 2.1, z, true);
+        }
         addBox(world, 4.5, 0.3, 0.6, trim, x - side * 1.8, 4.35, z);
       }
-      addBox(world, 0.6, 4.1, 32, plaster, side * 15.9, 2.05, 38, true);
+      // Leave a clear opening in the east cloister wall so the Marian grotto is visible.
+      addBox(world, 0.6, 4.1, 22, plaster, side * 15.9, 2.05, 33, true);
+      addBox(world, 0.6, 4.1, 8, plaster, side * 15.9, 2.05, 58, true);
     }
 
     // Garden beds, trees, flower borders, benches and lamps.
@@ -510,6 +532,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const z = 25 + i * 6.1;
         addBox(world, 3.5, 0.35, 3.0, darkStone, x, 0.16, z);
         addBox(world, 3.3, 0.16, 2.8, greenery, x, 0.38, z);
+        addBlocker(x, z, 1.75, 1.5);
         for (let k = 0; k < 14; k += 1) {
           const px = x + ((k % 4) - 1.5) * 0.6;
           const pz = z + (Math.floor(k / 4) - 1.5) * 0.55;
@@ -617,6 +640,38 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     // Kneeler faces the statue, leaving clear space between the path and the grotto.
     addBox(maryGrotto, 0.62, 0.18, 1.55, wood, -2.05, 0.62, 0);
     addBox(maryGrotto, 0.16, 0.72, 1.55, wood, -2.28, 0.98, 0);
+    // A readable sign and warm beacon make the shrine easy to spot from the central path.
+    const marySignCanvas = document.createElement('canvas');
+    marySignCanvas.width = 512;
+    marySignCanvas.height = 128;
+    const marySignContext = marySignCanvas.getContext('2d');
+    if (marySignContext) {
+      marySignContext.fillStyle = 'rgba(27, 30, 26, 0.88)';
+      marySignContext.beginPath();
+      marySignContext.roundRect(8, 8, 496, 112, 22);
+      marySignContext.fill();
+      marySignContext.strokeStyle = '#d9bd83';
+      marySignContext.lineWidth = 4;
+      marySignContext.stroke();
+      marySignContext.textAlign = 'center';
+      marySignContext.textBaseline = 'middle';
+      marySignContext.fillStyle = '#f3e7cf';
+      marySignContext.font = 'bold 38px serif';
+      marySignContext.fillText('성모 마리아 기도처', 256, 49);
+      marySignContext.fillStyle = '#d9bd83';
+      marySignContext.font = '22px sans-serif';
+      marySignContext.fillText('MARY SHRINE', 256, 91);
+    }
+    const marySignTexture = new THREE.CanvasTexture(marySignCanvas);
+    marySignTexture.colorSpace = THREE.SRGBColorSpace;
+    const marySign = new THREE.Sprite(new THREE.SpriteMaterial({ map: marySignTexture, transparent: true, depthWrite: false }));
+    marySign.scale.set(2.55, 0.64, 1);
+    marySign.position.set(14.15, 5.05, 49.5);
+    world.add(marySign);
+    const maryBeacon = new THREE.PointLight('#f4d39b', 1.0, 7.5, 2);
+    maryBeacon.position.set(14.15, 4.0, 49.5);
+    world.add(maryBeacon);
+
     addBlocker(16.4, 49.5, 1.75, 1.2);
     addBlocker(14.35, 49.5, 0.2, 0.95);
 
@@ -652,9 +707,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     // Low grass and flower island define the open walking space without boxing it in.
     const island = addMesh(world, new THREE.SphereGeometry(1, 20, 12), greenery, -7.2, 0.32, 45, false, true);
     island.scale.set(2.2, 0.36, 3.2);
+    addBlocker(-7.2, 45, 2.2, 3.2);
 
     // A small outdoor chapel is visible farther down the same continuous path.
-    addBox(world, 6.8, 4.8, 4.8, plaster, 0, 2.4, 59);
+    addBox(world, 6.8, 4.8, 4.8, plaster, 0, 2.4, 59, true);
     const gardenRoof = new THREE.Mesh(new THREE.ConeGeometry(5.2, 3.0, 4), darkWood);
     gardenRoof.position.set(0, 6.3, 59);
     gardenRoof.rotation.y = Math.PI / 4;
@@ -846,7 +902,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const seatSpots: THREE.Vector3[] = [];
     for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
       for (const sideX of [-4.25, 4.25]) {
-        for (const offset of [-1.0, 0, 1.0]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z - 0.55));
+        for (const offset of [-1.0, 0, 1.0]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z - 1.08));
       }
     }
     const occupiedSeats = new Set<number>();
@@ -863,7 +919,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
 
     const keys = new Set<string>();
-    let yaw = 0, pitch = 0.12, cameraDistance = 6.8;
+    let yaw = 0, pitch = -0.16, cameraDistance = 6.8;
     let pointerDown = false, pointerMoved = false, pointerTouch = false;
     let lastX = 0, lastY = 0, downX = 0, downY = 0;
     let pinchDistance = 0, joystickX = 0, joystickY = 0;
@@ -879,6 +935,144 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const raycaster = new THREE.Raycaster();
     const walkPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const worldBounds = { minX: -19.5, maxX: 19.5, minZ: -22.5, maxZ: 66 };
+
+    // Grid A* navigation keeps click-to-move and action destinations out of solid scenery.
+    const findPath = (startX: number, startZ: number, goalX: number, goalZ: number): THREE.Vector3[] => {
+      const cell = 0.75;
+      const minX = worldBounds.minX, minZ = worldBounds.minZ;
+      const cols = Math.ceil((worldBounds.maxX - minX) / cell) + 1;
+      const rows = Math.ceil((worldBounds.maxZ - minZ) / cell) + 1;
+      const total = cols * rows;
+      const toIndex = (ix: number, iz: number) => iz * cols + ix;
+      const coords = (index: number) => ({ ix: index % cols, iz: Math.floor(index / cols) });
+      const pointAt = (ix: number, iz: number) => ({ x: minX + ix * cell, z: minZ + iz * cell });
+      const isBlocked = (ix: number, iz: number) => {
+        if (ix < 0 || iz < 0 || ix >= cols || iz >= rows) return true;
+        const point = pointAt(ix, iz);
+        return collides(point.x, point.z);
+      };
+      const nearestFree = (x: number, z: number) => {
+        const cx = THREE.MathUtils.clamp(Math.round((x - minX) / cell), 0, cols - 1);
+        const cz = THREE.MathUtils.clamp(Math.round((z - minZ) / cell), 0, rows - 1);
+        if (!isBlocked(cx, cz)) return { ix: cx, iz: cz };
+        for (let radius = 1; radius <= 10; radius += 1) {
+          for (let dz = -radius; dz <= radius; dz += 1) {
+            for (let dx = -radius; dx <= radius; dx += 1) {
+              if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
+              if (!isBlocked(cx + dx, cz + dz)) return { ix: cx + dx, iz: cz + dz };
+            }
+          }
+        }
+        return null;
+      };
+      const start = nearestFree(startX, startZ);
+      const goal = nearestFree(goalX, goalZ);
+      if (!start || !goal) return [];
+      const startIndex = toIndex(start.ix, start.iz);
+      const goalIndex = toIndex(goal.ix, goal.iz);
+      if (startIndex === goalIndex) {
+        const goalPoint = pointAt(goal.ix, goal.iz);
+        return [new THREE.Vector3(goalPoint.x, 0, goalPoint.z)];
+      }
+      const gScore = new Float64Array(total);
+      gScore.fill(Number.POSITIVE_INFINITY);
+      const parent = new Int32Array(total);
+      parent.fill(-1);
+      const closed = new Uint8Array(total);
+      const heap: Array<{ index: number; score: number }> = [];
+      const pushHeap = (index: number, score: number) => {
+        let at = heap.length;
+        heap.push({ index, score });
+        while (at > 0) {
+          const parentAt = Math.floor((at - 1) / 2);
+          if (heap[parentAt].score <= score) break;
+          heap[at] = heap[parentAt];
+          at = parentAt;
+        }
+        heap[at] = { index, score };
+      };
+      const popHeap = () => {
+        const first = heap[0];
+        const last = heap.pop();
+        if (heap.length && last) {
+          let at = 0;
+          while (true) {
+            const left = at * 2 + 1, right = left + 1;
+            if (left >= heap.length) break;
+            const child = right < heap.length && heap[right].score < heap[left].score ? right : left;
+            if (heap[child].score >= last.score) break;
+            heap[at] = heap[child];
+            at = child;
+          }
+          heap[at] = last;
+        }
+        return first?.index ?? -1;
+      };
+      const heuristic = (ix: number, iz: number) => {
+        const dx = Math.abs(ix - goal.ix), dz = Math.abs(iz - goal.iz);
+        return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
+      };
+      gScore[startIndex] = 0;
+      pushHeap(startIndex, heuristic(start.ix, start.iz));
+      let found = false;
+      let iterations = 0;
+      while (heap.length && iterations < total * 2) {
+        iterations += 1;
+        const current = popHeap();
+        if (current < 0 || closed[current]) continue;
+        if (current === goalIndex) { found = true; break; }
+        closed[current] = 1;
+        const { ix, iz } = coords(current);
+        for (let dz = -1; dz <= 1; dz += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if (dx === 0 && dz === 0) continue;
+            const nx = ix + dx, nz = iz + dz;
+            if (isBlocked(nx, nz)) continue;
+            if (dx !== 0 && dz !== 0 && (isBlocked(ix + dx, iz) || isBlocked(ix, iz + dz))) continue;
+            const next = toIndex(nx, nz);
+            if (closed[next]) continue;
+            const tentative = gScore[current] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1);
+            if (tentative >= gScore[next]) continue;
+            gScore[next] = tentative;
+            parent[next] = current;
+            pushHeap(next, tentative + heuristic(nx, nz));
+          }
+        }
+      }
+      if (!found) return [];
+      const indices: number[] = [];
+      let cursor = goalIndex;
+      while (cursor !== startIndex && cursor >= 0) {
+        indices.push(cursor);
+        cursor = parent[cursor];
+      }
+      indices.reverse();
+      const pathPoints = indices.map(index => {
+        const { ix, iz } = coords(index);
+        const point = pointAt(ix, iz);
+        return new THREE.Vector3(point.x, 0, point.z);
+      });
+      if (pathPoints.length <= 2) return pathPoints;
+      const turns: THREE.Vector3[] = [];
+      let previousDx = Math.sign(pathPoints[0].x - startX);
+      let previousDz = Math.sign(pathPoints[0].z - startZ);
+      for (let i = 1; i < pathPoints.length; i += 1) {
+        const dx = Math.sign(pathPoints[i].x - pathPoints[i - 1].x);
+        const dz = Math.sign(pathPoints[i].z - pathPoints[i - 1].z);
+        if (dx !== previousDx || dz !== previousDz) turns.push(pathPoints[i - 1]);
+        previousDx = dx;
+        previousDz = dz;
+      }
+      turns.push(pathPoints[pathPoints.length - 1]);
+      return turns;
+    };
+
+    const setRoute = (goalX: number, goalZ: number) => {
+      const route = findPath(avatar.position.x, avatar.position.z, goalX, goalZ);
+      movementTarget = route[0] ?? null;
+      movementPath = route.slice(1);
+      return route.length > 0;
+    };
 
     const standUp = () => {
       if (currentSeat !== null) occupiedSeats.delete(currentSeat);
@@ -897,10 +1091,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       raycaster.setFromCamera(ndc, camera);
       const point = raycaster.ray.intersectPlane(walkPlane, new THREE.Vector3());
       if (!point) return;
-      movementPath = [];
-      movementTarget = new THREE.Vector3(
-        THREE.MathUtils.clamp(point.x, worldBounds.minX, worldBounds.maxX), 0,
-        THREE.MathUtils.clamp(point.z, worldBounds.minZ, worldBounds.maxZ));
+      const goalX = THREE.MathUtils.clamp(point.x, worldBounds.minX, worldBounds.maxX);
+      const goalZ = THREE.MathUtils.clamp(point.z, worldBounds.minZ, worldBounds.maxZ);
+      setRoute(goalX, goalZ);
       pendingSeat = null;
       pendingAction = null;
       if (!wasSitting) gesture.current = 'idle';
@@ -929,8 +1122,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       const dx = event.clientX - lastX, dy = event.clientY - lastY;
       if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) pointerMoved = true;
       if (pointerMoved) {
-        yaw += dx * (pointerTouch ? 0.006 : 0.004);
-        pitch = THREE.MathUtils.clamp(pitch - dy * (pointerTouch ? 0.0045 : 0.003), -0.28, 0.58);
+        yaw += dx * (pointerTouch ? 0.009 : 0.0075);
+        pitch = THREE.MathUtils.clamp(pitch - dy * (pointerTouch ? 0.008 : 0.007), -0.92, 0.36);
       }
       lastX = event.clientX; lastY = event.clientY;
     };
@@ -957,7 +1150,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         if (!free.length) { setActionNotice('비어 있는 자리가 없습니다.'); return; }
         pendingSeat = free[0].index;
         pendingAction = null;
-        movementPath = []; movementTarget = free[0].position.clone();
+        const routed = setRoute(free[0].position.x, free[0].position.z);
+        if (!routed) { pendingSeat = null; setActionNotice('자리까지 이동할 수 있는 통로를 찾지 못했습니다.'); return; }
         gesture.current = 'idle'; rosary.visible = false;
         setActionNotice('가장 가까운 빈자리를 찾아 이동합니다.');
         return;
@@ -966,11 +1160,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         const wasSitting = isSitting;
         if (wasSitting) standUp();
         pendingSeat = null; pendingAction = 'kneel';
-        movementPath = [
-          new THREE.Vector3(0, 0, 54),
-          new THREE.Vector3(13.15, 0, 54),
-        ];
-        movementTarget = new THREE.Vector3(13.15,0,49.5);
+        const routed = setRoute(13.15, 49.5);
+        if (!routed) {
+          pendingAction = null;
+          setActionNotice('성모상까지 이어지는 통로를 찾지 못했습니다.');
+          return;
+        }
         if (!wasSitting) gesture.current = 'idle';
         rosary.visible = false;
         setActionNotice('정원에 있는 성모 마리아 기도처로 이동합니다.');
@@ -1292,14 +1487,15 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
 
 
-      const followHeight = 2.15 + pitch * 2.6;
+      const focusHeight = isSitting ? 1.05 : 1.38;
+      const horizontalDistance = cameraDistance * Math.cos(pitch);
       cameraTarget.set(
-        avatar.position.x - Math.sin(yaw) * cameraDistance,
-        followHeight + Math.max(0, cameraDistance - 5.8) * 0.16,
-        avatar.position.z + Math.cos(yaw) * cameraDistance,
+        avatar.position.x - Math.sin(yaw) * horizontalDistance,
+        focusHeight - Math.sin(pitch) * cameraDistance,
+        avatar.position.z + Math.cos(yaw) * horizontalDistance,
       );
-      camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 8));
-      lookTarget.set(avatar.position.x, 1.25 + pitch * 0.55, avatar.position.z - 0.25);
+      camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
+      lookTarget.set(avatar.position.x, focusHeight, avatar.position.z - 0.12);
       camera.lookAt(lookTarget);
 
       const fontDistance = Math.hypot(avatar.position.x + 2.2, avatar.position.z - 12);
@@ -1347,6 +1543,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       });
       loadedTextures.forEach(texture => texture.dispose());
       labelTexture.dispose();
+      marySignTexture.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
@@ -1399,13 +1596,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         {actionNotice}{nearMary ? ' · 성모님 기도처 근처' : ''}
       </div>
       <div className="world-action-bar" role="group" aria-label="주요 행동">
-        <button type="button" onClick={() => dispatchWorldAction('cross')}>✝ 성호경</button>
-        <button type="button" onClick={() => dispatchWorldAction('prayer')}>🙏 기도</button>
+        <button type="button" onClick={() => dispatchWorldAction('cross')}>✝ 성호 긋기</button>
+        <button type="button" onClick={() => dispatchWorldAction('prayer')}>🙏 기도하기</button>
         <button type="button" onClick={() => dispatchWorldAction('bow')}>목례</button>
-        <button type="button" onClick={() => dispatchWorldAction('greet')}>인사</button>
-        <button type="button" onClick={() => dispatchWorldAction('seat')}>자리 앉기</button>
+        <button type="button" onClick={() => dispatchWorldAction('greet')}>인사하기</button>
+        <button type="button" onClick={() => dispatchWorldAction('seat')}>🪑 착석하기</button>
         <button type="button" onClick={() => dispatchWorldAction('rosary')}>📿 묵주기도</button>
-        <button type="button" onClick={() => dispatchWorldAction('mary')}>{nearMary ? '성모님께 기도' : '성모님 기도처'}</button>
+        <button type="button" onClick={() => dispatchWorldAction('mary')}>🌹 {nearMary ? '성모님께 기도' : '성모상 찾아가기'}</button>
       </div>
       <div className="mobile-joystick" role="application" aria-label="모바일 이동 조이스틱"
         onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); updateJoystick(event); }}
