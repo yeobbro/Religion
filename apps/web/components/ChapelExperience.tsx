@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Intention = { id: string; text: string; createdAt: string };
@@ -14,6 +14,7 @@ export default function ChapelExperience() {
   const [intention, setIntention] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [intentions, setIntentions] = useState<Intention[]>([]);
+  const [candleCount, setCandleCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -36,6 +37,8 @@ export default function ChapelExperience() {
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false }).limit(20);
       if (!error) setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at })));
+      const { count } = await supabase.from('prayer_intentions').select('id', { count: 'exact', head: true }).eq('parish_id', parishId).eq('is_public', true).gt('expires_at', new Date().toISOString());
+      if (count !== null) setCandleCount(count);
     };
     void loadIntentions();
     const channel = supabase.channel('public-prayer-intentions')
@@ -43,6 +46,7 @@ export default function ChapelExperience() {
         const row = payload.new as { id: string; intention: string; created_at: string; is_public: boolean; expires_at: string };
         if (row.is_public && row.expires_at > new Date().toISOString()) {
           setIntentions(items => [{ id: row.id, text: row.intention, createdAt: row.created_at }, ...items.filter(item => item.id !== row.id)].slice(0, 20));
+          setCandleCount(count => count + 1);
         }
       }).subscribe();
     return () => { void supabase?.removeChannel(channel); };
@@ -52,8 +56,6 @@ export default function ChapelExperience() {
     if (!audioRef.current) return;
     audioRef.current.volume = volume;
   }, [volume]);
-
-  const candleCount = intentions.length;
 
   const addIntention = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -73,11 +75,13 @@ export default function ChapelExperience() {
         const { data } = await supabase.from('prayer_intentions').select('id, intention, created_at')
           .eq('parish_id', parishId).eq('is_public', true).order('created_at', { ascending: false }).limit(20);
         setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at })));
+        const { count } = await supabase.from('prayer_intentions').select('id', { count: 'exact', head: true }).eq('parish_id', parishId).eq('is_public', true).gt('expires_at', new Date().toISOString());
+        if (count !== null) setCandleCount(count);
       } else setNotice('기도 지향을 비공개로 봉헌했어요.');
       else if (isPublic) setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]);
       else setNotice('기도 지향을 비공개로 봉헌했어요.');
     } else {
-      if (isPublic) setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]);
+      if (isPublic) { setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]); setCandleCount(count => count + 1); }
       else setNotice('기도 지향을 이 브라우저에서 비공개로 봉헌했어요. (데모 모드)');
     }
     setIntention(''); setLoading(false);
@@ -103,7 +107,7 @@ export default function ChapelExperience() {
           <form onSubmit={addIntention} className="intention-form"><label htmlFor="intention">나의 기도 지향</label><textarea id="intention" value={intention} onChange={e => setIntention(e.target.value)} maxLength={500} placeholder="주님, 오늘 제가 바치는 이 기도를 들어주소서..." /><div className="form-bottom"><span>{intention.length}/500</span><label className="privacy-toggle"><input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} /><span className="toggle-ui" /> 공동체에 공개하기</label></div><button className="primary-button" type="submit" disabled={loading}>{loading ? '봉헌 중...' : '🕯　촛불 밝히기'}</button></form>
           {notice && <p className="notice" role="status">{notice}</p>}
           <div className="privacy-note">🔒 공개를 선택하지 않으면 기도 지향은 다른 사람에게 표시되지 않습니다.</div>
-          <div className="candle-summary"><div className="candle-icon">🕯</div><div><strong>{candleCount.toLocaleString()}개의 촛불</strong><span>이 공간에 공개된 기도 지향</span></div></div>
+          <div className="candle-summary"><div className="candle-icon">🕯</div><div><strong>{candleCount.toLocaleString()}개의 촛불</strong><span>현재 밝혀진 공개 촛불</span></div></div>
           {intentions.length > 0 && <div className="intention-list"><h3>함께 봉헌된 기도</h3>{intentions.slice(0,4).map(item => <article key={item.id} className="intention-item"><span>🕯</span><p>{item.text}</p></article>)}</div>}
         </section>
         <section className="panel prayer-guide-panel">
