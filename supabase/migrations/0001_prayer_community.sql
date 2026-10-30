@@ -42,4 +42,5 @@ alter publication supabase_realtime add table public.prayer_intentions;
 
 -- Explicit grants for the application roles.
 grant select on public.parishes to anon, authenticated;
+grant select on public.prayer_intentions to anon;
 grant select, insert on public.prayer_intentions to authenticated;
