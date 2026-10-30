@@ -830,47 +830,136 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const animate = () => {
       frame = requestAnimationFrame(animate);
       const delta = Math.min(clock.getDelta(), 0.04);
-      const forward = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
-      const sideways = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
-      const moving = Math.abs(forward) + Math.abs(sideways) > 0;
+      const keyboardForward = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
+      const keyboardSideways = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
+      const forward = keyboardForward - joystickY;
+      const sideways = keyboardSideways + joystickX;
+      const manualMoving = Math.abs(forward) + Math.abs(sideways) > 0.08;
       const oldX = avatar.position.x;
       const oldZ = avatar.position.z;
-      if (moving) {
+      let moveX = 0;
+      let moveZ = 0;
+      let moving = false;
+
+      if (manualMoving) {
+        if (movementTarget || pendingSeat !== null || pendingAction) {
+          movementTarget = null;
+          pendingSeat = null;
+          pendingAction = null;
+        }
+        if (isSitting) standUp();
         const length = Math.hypot(forward, sideways) || 1;
         const f = forward / length;
-        const s = sideways / length;
-        const dx = Math.sin(yaw) * f + Math.cos(yaw) * s;
-        const dz = -Math.cos(yaw) * f + Math.sin(yaw) * s;
-        const nextX = THREE.MathUtils.clamp(oldX + dx * delta * 4.3, -19.5, 19.5);
-        const nextZ = THREE.MathUtils.clamp(oldZ + dz * delta * 4.3, -22.5, 66);
+        const side = sideways / length;
+        moveX = Math.sin(yaw) * f + Math.cos(yaw) * side;
+        moveZ = -Math.cos(yaw) * f + Math.sin(yaw) * side;
+        moving = true;
+      } else if (movementTarget && !isSitting) {
+        const diffX = movementTarget.x - oldX;
+        const diffZ = movementTarget.z - oldZ;
+        const distance = Math.hypot(diffX, diffZ);
+        if (distance > 0.34) {
+          moveX = diffX / distance;
+          moveZ = diffZ / distance;
+          moving = true;
+        } else {
+          movementTarget = null;
+          if (pendingSeat !== null) {
+            const seatIndex = pendingSeat;
+            const seat = seatSpots[seatIndex];
+            occupiedSeats.add(seatIndex);
+            currentSeat = seatIndex;
+            pendingSeat = null;
+            avatar.position.set(seat.x, 0.18, seat.z + 0.66);
+            avatar.rotation.y = 0;
+            isSitting = true;
+            gesture.current = 'sit';
+            gestureAt.current = performance.now();
+            setActionNotice('빈자리에 앉았습니다. 이동하면 다시 일어납니다.');
+          } else if (pendingAction === 'prayer') {
+            pendingAction = null;
+            avatar.rotation.y = Math.PI / 2;
+            gesture.current = 'prayer';
+            gestureAt.current = performance.now();
+            setActionNotice('성모님 앞에서 두 손을 모아 기도합니다.');
+          }
+        }
+      }
+
+      if (moving) {
+        const nextX = THREE.MathUtils.clamp(oldX + moveX * delta * 4.3, worldBounds.minX, worldBounds.maxX);
+        const nextZ = THREE.MathUtils.clamp(oldZ + moveZ * delta * 4.3, worldBounds.minZ, worldBounds.maxZ);
         if (!collides(nextX, oldZ)) avatar.position.x = nextX;
         if (!collides(avatar.position.x, nextZ)) avatar.position.z = nextZ;
-        avatar.rotation.y = Math.atan2(dx, -dz);
+        avatar.rotation.y = Math.atan2(moveX, -moveZ);
       }
+
       const gait = moving ? Math.sin(clock.elapsedTime * 11.5) * 0.5 : 0;
-      leftLeg.rotation.x = gait;
-      rightLeg.rotation.x = -gait;
+      if (gesture.current !== 'sit') {
+        leftLeg.rotation.x = gait;
+        rightLeg.rotation.x = -gait;
+      }
       leftArm.rotation.x = -gait * 0.42;
       rightArm.rotation.x = gait * 0.42;
+      leftArm.rotation.z = 0;
+      rightArm.rotation.z = 0;
+      head.rotation.x = 0;
 
       if (gesture.current !== 'idle') {
-        const duration = gesture.current === 'dip' ? 950 : 1250;
-        const progress = Math.min(1, (performance.now() - gestureAt.current) / duration);
-        if (gesture.current === 'dip') {
-          leftArm.rotation.x = -1.2 * Math.sin(progress * Math.PI);
-          leftArm.rotation.z = 0.58 * Math.sin(progress * Math.PI);
+        if (gesture.current === 'sit') {
+          avatar.position.y = 0.18;
+          leftLeg.rotation.x = -0.95;
+          rightLeg.rotation.x = -0.95;
+          leftArm.rotation.x = -0.18;
+          rightArm.rotation.x = -0.18;
+          head.rotation.x = 0.08;
+        } else if (gesture.current === 'rosary') {
+          leftArm.rotation.x = -0.92;
+          rightArm.rotation.x = -0.92;
+          leftArm.rotation.z = 0.18;
+          rightArm.rotation.z = -0.18;
+          head.rotation.x = 0.12;
+          rosary.visible = true;
+          rosary.rotation.z = Math.sin(clock.elapsedTime * 1.4) * 0.035;
+          rosaryBeadMaterial.emissiveIntensity = 0.12 + Math.sin(clock.elapsedTime * 2.2) * 0.05;
         } else {
-          const phase = progress * 3;
-          leftArm.rotation.x = phase < 1 ? -1.3 : phase < 2 ? -0.42 : -1.02;
-          leftArm.rotation.z = phase < 1 ? 0.05 : phase < 2 ? 0.92 : -0.22;
-        }
-        if (progress >= 1) {
-          gesture.current = 'idle';
-          leftArm.rotation.z = 0;
+          const duration = gesture.current === 'dip' ? 950 : gesture.current === 'cross' ? 1350 : gesture.current === 'prayer' ? 2300 : gesture.current === 'bow' ? 1100 : 1550;
+          const progress = Math.min(1, (performance.now() - gestureAt.current) / duration);
+          const pulse = Math.sin(progress * Math.PI);
+          if (gesture.current === 'dip') {
+            leftArm.rotation.x = -1.2 * pulse;
+            leftArm.rotation.z = 0.58 * pulse;
+            head.rotation.x = 0.08 * pulse;
+          } else if (gesture.current === 'cross') {
+            leftArm.rotation.x = -0.95 * pulse - 0.18;
+            rightArm.rotation.x = -0.95 * pulse - 0.18;
+            leftArm.rotation.z = 0.38 * pulse;
+            rightArm.rotation.z = -0.38 * pulse;
+          } else if (gesture.current === 'prayer') {
+            leftArm.rotation.x = -0.86 * pulse - 0.22;
+            rightArm.rotation.x = -0.86 * pulse - 0.22;
+            leftArm.rotation.z = 0.2 * pulse;
+            rightArm.rotation.z = -0.2 * pulse;
+            head.rotation.x = 0.22 * pulse;
+          } else if (gesture.current === 'bow') {
+            head.rotation.x = 0.42 * pulse;
+            avatar.position.y = -0.035 * pulse;
+            leftArm.rotation.x = -0.12 * pulse;
+            rightArm.rotation.x = -0.12 * pulse;
+          } else if (gesture.current === 'greet') {
+            rightArm.rotation.x = -1.0 * pulse;
+            rightArm.rotation.z = -0.4 * pulse + Math.sin(progress * Math.PI * 8) * 0.15 * pulse;
+            leftArm.rotation.x = -0.08 * pulse;
+          }
+          if (progress >= 1) {
+            gesture.current = 'idle';
+            avatar.position.y = 0;
+            rosary.visible = false;
+          }
         }
       } else {
-        leftArm.rotation.z = 0;
-        rightArm.rotation.z = 0;
+        avatar.position.y = 0;
+        rosary.visible = false;
       }
 
       const followHeight = 2.15 + pitch * 2.6;
@@ -888,6 +977,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (near !== lastNearFont) {
         lastNearFont = near;
         setNearFont(near);
+      }
+      const maryDistance = Math.hypot(avatar.position.x - 13.2, avatar.position.z - 49.5);
+      const nearShrine = maryDistance < 4.2;
+      if (nearShrine !== lastNearMary) {
+        lastNearMary = nearShrine;
+        setNearMary(nearShrine);
       }
       (fontHalo.material as THREE.MeshBasicMaterial).opacity = near ? 0.9 : 0.38;
       fontLight.intensity = near ? 2.5 : 1.3;
