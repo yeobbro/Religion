@@ -753,29 +753,38 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     avatarPart(new THREE.CylinderGeometry(0.1, 0.11, 0.18, 12), skin, 0, 1.85, 0);
     const head = avatarPart(new THREE.SphereGeometry(0.235, 28, 20), skin, 0, 2.08, -0.02);
     head.scale.set(0.92, 1.08, 0.95);
-    const hairCap = avatarPart(new THREE.SphereGeometry(0.24, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.58), hair, 0, 2.16, 0.01);
+    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.58), hair);
+    hairCap.position.set(0, 0.08, 0.03);
     hairCap.scale.set(1.02, 0.88, 1.03);
-    const fringe = avatarPart(new THREE.SphereGeometry(0.16, 20, 12), hair, 0, 2.25, -0.115);
+    head.add(hairCap);
+    const facePart = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      head.add(mesh);
+      return mesh;
+    };
+    const fringe = facePart(new THREE.SphereGeometry(0.16, 20, 12), hair, 0, 0.17, -0.095);
     fringe.scale.set(1.08, 0.38, 0.54);
     const faceWhite = makeMat('#f4eee5', 0.34);
     const iris = makeMat('#554036', 0.36);
     const pupil = makeMat('#191a18', 0.26);
     const lip = makeMat('#986d60', 0.68);
     for (const side of [-1, 1]) {
-      const eye = avatarPart(new THREE.SphereGeometry(0.035, 16, 12), faceWhite, side * 0.083, 2.105, -0.218);
+      const eye = facePart(new THREE.SphereGeometry(0.035, 16, 12), faceWhite, side * 0.083, 0.025, -0.198);
       eye.scale.set(1, 0.62, 0.38);
-      const irisMesh = avatarPart(new THREE.SphereGeometry(0.018, 14, 10), iris, side * 0.083, 2.104, -0.232);
+      const irisMesh = facePart(new THREE.SphereGeometry(0.018, 14, 10), iris, side * 0.083, 0.024, -0.212);
       irisMesh.scale.set(0.9, 1, 0.5);
-      avatarPart(new THREE.SphereGeometry(0.009, 12, 8), pupil, side * 0.083, 2.104, -0.239);
-      const brow = avatarPart(new THREE.CapsuleGeometry(0.012, 0.055, 3, 8), hair, side * 0.083, 2.158, -0.21);
+      facePart(new THREE.SphereGeometry(0.009, 12, 8), pupil, side * 0.083, 0.024, -0.219);
+      const brow = facePart(new THREE.CapsuleGeometry(0.012, 0.055, 3, 8), hair, side * 0.083, 0.078, -0.19);
       brow.rotation.z = side * -0.1;
       brow.rotation.x = Math.PI / 2;
-      const ear = avatarPart(new THREE.SphereGeometry(0.065, 14, 10), skin, side * 0.218, 2.06, -0.005);
+      const ear = facePart(new THREE.SphereGeometry(0.065, 14, 10), skin, side * 0.218, -0.02, 0.015);
       ear.scale.set(0.38, 0.72, 0.62);
     }
-    const nose = avatarPart(new THREE.SphereGeometry(0.038, 14, 10), skin, 0, 2.045, -0.245);
+    const nose = facePart(new THREE.SphereGeometry(0.038, 14, 10), skin, 0, -0.035, -0.225);
     nose.scale.set(0.72, 0.9, 0.62);
-    const mouth = avatarPart(new THREE.SphereGeometry(0.035, 14, 10), lip, 0, 1.99, -0.219);
+    const mouth = facePart(new THREE.SphereGeometry(0.035, 14, 10), lip, 0, -0.09, -0.199);
     mouth.scale.set(1.0, 0.24, 0.25);
     avatarPart(new THREE.BoxGeometry(0.42, 0.55, 0.17), bag, 0, 1.33, 0.275);
 
