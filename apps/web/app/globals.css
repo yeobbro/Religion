@@ -371,3 +371,101 @@
     transform: translateX(-50%);
   }
 }
+
+
+/* Compact sound selector, always available while inside the 3D cathedral. */
+.immersive-audio-dock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  margin-right: 10px;
+  padding: 7px 10px;
+  border: 1px solid rgba(238, 226, 202, .42);
+  border-radius: 14px;
+  background: rgba(15, 20, 17, .82);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+.immersive-audio-select,
+.immersive-volume {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #eee5d5;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.immersive-audio-select select {
+  min-width: 132px;
+  height: 31px;
+  padding: 0 26px 0 10px;
+  border: 1px solid rgba(224, 207, 174, .5);
+  border-radius: 9px;
+  outline: none;
+  background: #222923;
+  color: #f7efdf;
+  font-size: 10px;
+  cursor: pointer;
+}
+.immersive-audio-select select:focus-visible {
+  outline: 2px solid #e5c995;
+  outline-offset: 2px;
+}
+.immersive-volume input {
+  width: 82px;
+  accent-color: #ddc18d;
+  cursor: pointer;
+}
+.immersive-audio-notice {
+  color: #ffdfb1;
+  font-size: 9px;
+  max-width: 170px;
+  white-space: normal;
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .immersive-toolbar {
+    gap: 6px;
+    padding: 8px 9px;
+    align-items: flex-start;
+  }
+  .immersive-audio-dock {
+    gap: 6px;
+    margin: 0 4px 0 auto;
+    padding: 6px;
+    border-radius: 11px;
+  }
+  .immersive-audio-select {
+    gap: 4px;
+    font-size: 8px;
+  }
+  .immersive-audio-select select {
+    min-width: 112px;
+    max-width: 34vw;
+    height: 29px;
+    padding: 0 20px 0 7px;
+    font-size: 9px;
+  }
+  .immersive-volume {
+    gap: 4px;
+    font-size: 8px;
+  }
+  .immersive-volume input {
+    width: 48px;
+  }
+  .immersive-audio-notice {
+    display: none;
+  }
+}
+@media (max-width: 390px) {
+  .immersive-volume span {
+    display: none;
+  }
+  .immersive-volume input {
+    width: 42px;
+  }
+  .immersive-audio-select select {
+    min-width: 104px;
+  }
+}
