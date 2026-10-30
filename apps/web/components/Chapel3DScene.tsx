@@ -182,7 +182,7 @@ export default function Chapel3DScene({ onCandleChange }: Props) {
       const isLit = candleLights[index].intensity > 0;
       candleLights[index].intensity = isLit ? 0 : 3.2;
       candleFlames[index].visible = !isLit;
-      setLitCount(count => count + (isLit ? -1 : 1));
+      setLitCount(count => { const next = count + (isLit ? -1 : 1); onCandleChange?.(next); return next; });
       setHint(isLit ? '촛불을 잠시 껐습니다.' : '작은 촛불 하나가 밝혀졌습니다.');
     };
     const onResize = () => {
