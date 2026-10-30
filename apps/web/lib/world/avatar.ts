@@ -96,6 +96,14 @@ export type AvatarOptions = {
   hair?: string;
   showName?: boolean;
   rosary?: boolean;
+  /**
+   * Drive a realistic human model instead of drawing this one: the body is hidden and
+   * only acts as an invisible pose driver (props such as veil, rosary and taper stay visible).
+   */
+  ghost?: boolean;
+  /** Head centre height in chest space; human proportions use a smaller head than the cute default. */
+  headCenterY?: number;
+  headScale?: number;
 };
 type Palette = { top: string; trim: string; bottom: string; shoes: string; hair: string; long: boolean; wideSleeves: boolean };
 const PALETTES: Record<Outfit, Palette> = {
@@ -120,6 +128,8 @@ export class Avatar {
   readonly taper = new THREE.Group();
   readonly book = new THREE.Group();
   readonly outfit: Outfit;
+  /** Chest-space head centre height used by the gestures (forehead touch, veil). */
+  private readonly hcY: number;
   private robe: THREE.Mesh | null = null;
   private robeBase: Float32Array | null = null;
   private readonly taperFlame: THREE.Sprite;
@@ -151,6 +161,7 @@ export class Avatar {
     const outfit = opts.outfit ?? 'casual';
     const lite = opts.lite ?? false;
     this.outfit = outfit;
+    this.hcY = opts.headCenterY ?? HEAD_CENTER.y;
     const seg = lite ? 12 : 20;
     const P = PALETTES[outfit];
     const skin = this.mat(new THREE.MeshStandardMaterial({ color: opts.skin ?? '#f0c6a8', roughness: 0.55, metalness: 0 }));
@@ -191,7 +202,7 @@ export class Avatar {
     this.neck.position.y = 0.09;
     this.neck.add(this.head);
     this.head.position.y = HEAD_PIVOT.y - 0.09;
-    this.head.scale.setScalar(HEAD_SCALE);
+    this.head.scale.setScalar(opts.headScale ?? HEAD_SCALE);
 
     // Hips, torso, collar, neck.
     const hips = add(this.pelvis, lathe([[0, -0.1], [0.12, -0.098], [0.14, -0.06], [0.143, 0.0], [0.139, 0.07], [0.136, 0.11]]), P.long ? top : bottom);
@@ -519,6 +530,28 @@ export class Avatar {
     this.label.position.set(0, 2.08, 0);
     this.label.visible = opts.showName ?? true;
     this.root.add(this.label);
+
+    if (opts.ghost) this.setGhost(true);
+  }
+
+  /** Hide the drawn body (keeping props: veil, rosary, book, taper, name plate). */
+  setGhost(on: boolean) {
+    const keep = [this.veil, this.rosary, this.book, this.taper, this.label] as THREE.Object3D[];
+    const kept = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (keep.includes(p)) return true; return false; };
+    this.root.traverse(o => { if ((o as THREE.Mesh).isMesh && !kept(o) && o.userData.human !== true) o.visible = !on; });
+  }
+
+  /** Joint groups of the pose driver, for retargeting onto a skinned human. */
+  rig() {
+    return { pelvis: this.pelvis, spine: this.spine, chest: this.chest, neck: this.neck, head: this.head, arms: this.arms, legs: this.legs, label: this.label };
+  }
+
+  /** Put an arm straight into a target pose (used once to match a human model's bind pose). */
+  poseArmNow(side: 'left' | 'right', t: ArmTarget) {
+    const arm = this.arms[side];
+    arm.state = cloneTarget(t);
+    this.chest.updateMatrixWorld(true);
+    this.solveArm(arm);
   }
 
   private mat<T extends THREE.Material>(m: T): T {
@@ -774,7 +807,7 @@ export class Avatar {
         const fn = f.clone().normalize();
         return flat(fromTip(tip, fn), fn, towardBody, pole);
       };
-      const forehead = key(V(0.0, HEAD_CENTER.y + 0.05, -0.136), V(-0.22, 0.8, 0.5));
+      const forehead = key(V(0.0, this.hcY + 0.05, -0.136), V(-0.22, 0.8, 0.5));
       const chest = key(V(0.0, -0.01, -0.128), V(-0.3, 0.55, 0.78));
       const lShoulder = key(V(-0.168, 0.045, -0.045), V(-0.6, 0.52, 0.6));
       const rShoulder = key(V(0.168, 0.045, -0.045), V(0.05, 0.72, 0.69));
@@ -811,8 +844,8 @@ export class Avatar {
     }
     if (g === 'veilOn' || g === 'veilOff') {
       // Both hands lift the veil above the head and lower it onto the hair (or the reverse).
-      const above = (s: Side) => flat(fromTip(V(0.11 * s, HEAD_CENTER.y + 0.2, -0.02), V(0.15 * s, 1, 0.1)), V(0.15 * s, 1, 0.1), V(-s, 0, 0), V(1 * s, -0.5, 0.3), 0.55);
-      const temple = (s: Side) => flat(fromTip(V(0.135 * s, HEAD_CENTER.y + 0.02, -0.0), V(0.1 * s, 1, 0.15)), V(0.1 * s, 1, 0.15), V(-s, 0, 0), V(1 * s, -0.6, 0.3), 0.5);
+      const above = (s: Side) => flat(fromTip(V(0.11 * s, this.hcY + 0.2, -0.02), V(0.15 * s, 1, 0.1)), V(0.15 * s, 1, 0.1), V(-s, 0, 0), V(1 * s, -0.5, 0.3), 0.55);
+      const temple = (s: Side) => flat(fromTip(V(0.135 * s, this.hcY + 0.02, -0.0), V(0.1 * s, 1, 0.15)), V(0.1 * s, 1, 0.15), V(-s, 0, 0), V(1 * s, -0.6, 0.3), 0.5);
       const on = g === 'veilOn';
       const seq = (s: Side): [number, ArmTarget][] => on
         ? [[0, cloneTarget(s > 0 ? restR : restL)], [0.7, above(s)], [1.0, above(s)], [1.7, temple(s)], [1.9, temple(s)], [2.5, cloneTarget(s > 0 ? restR : restL)]]

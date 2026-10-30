@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Avatar, type HandsMode, type Outfit, type Posture } from './avatar';
 import type { Site } from './cathedral';
+import { HumanAvatar, lookById } from './human';
 
 /**
  * People who make the church feel lived in, placed the way a Sunday Mass is arranged:
@@ -44,10 +45,10 @@ export function createNpcs(site: Site): Npcs {
 
   const place = (opts: {
     outfit: Outfit; x: number; z: number; y?: number; yaw: number; posture?: Posture; seat?: number;
-    routine: Routine; period: number; name?: string;
+    routine: Routine; period: number; name?: string; look?: string;
   }) => {
     pick += 1;
-    const avatar = new Avatar({
+    const avatar: Avatar = opts.look ? new HumanAvatar({ name: '', showName: false, look: lookById(opts.look) }) : new Avatar({
       name: opts.name ?? '',
       outfit: opts.outfit,
       lite: true,
@@ -108,13 +109,13 @@ export function createNpcs(site: Site): Npcs {
   }
 
   // Parishioners scattered through the pews, some praying, one with a rosary.
-  const wanted: { row: number; side: -1 | 1; off: number; outfit: Outfit; hands: HandsMode; posture: Posture }[] = [
-    { row: 1, side: -1, off: 1, outfit: 'casual', hands: 'prayer', posture: 'sit' },
-    { row: 2, side: 1, off: 3, outfit: 'dress', hands: 'rosary', posture: 'sit' },
-    { row: 4, side: -1, off: 3, outfit: 'casual', hands: 'rest', posture: 'sit' },
-    { row: 5, side: 1, off: 1, outfit: 'monk', hands: 'prayer', posture: 'sit' },
-    { row: 7, side: -1, off: 2, outfit: 'dress', hands: 'prayer', posture: 'sit' },
-    { row: 8, side: 1, off: 2, outfit: 'casual', hands: 'rest', posture: 'sit' },
+  const wanted: { row: number; side: -1 | 1; off: number; outfit: Outfit; look: string; hands: HandsMode; posture: Posture }[] = [
+    { row: 1, side: -1, off: 1, outfit: 'casual', look: 'm-navy', hands: 'prayer', posture: 'sit' },
+    { row: 2, side: 1, off: 3, outfit: 'dress', look: 'f-dress', hands: 'rosary', posture: 'sit' },
+    { row: 4, side: -1, off: 3, outfit: 'casual', look: 'f-suit', hands: 'rest', posture: 'sit' },
+    { row: 5, side: 1, off: 1, outfit: 'monk', look: 'm-sweater', hands: 'prayer', posture: 'sit' },
+    { row: 7, side: -1, off: 2, outfit: 'dress', look: 'f-black', hands: 'prayer', posture: 'sit' },
+    { row: 8, side: 1, off: 2, outfit: 'casual', look: 'm-grey', hands: 'rest', posture: 'sit' },
   ];
   const taken = new Set<number>();
   for (const w of wanted) {
@@ -124,7 +125,7 @@ export function createNpcs(site: Site): Npcs {
     if (!seat) continue;
     taken.add(idx);
     place({
-      outfit: w.outfit, x: seat.x, z: seat.z, yaw: 0, posture: w.posture, seat: 0.48, period: 40,
+      outfit: w.outfit, look: w.look, x: seat.x, z: seat.z, yaw: 0, posture: w.posture, seat: 0.48, period: 40,
       routine: w.hands === 'rest' ? [{ at: 0, hands: 'rest' }, { at: 25, hands: 'prayer' }] : [{ at: 0, hands: w.hands }],
     });
   }

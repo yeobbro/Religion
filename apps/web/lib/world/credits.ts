@@ -416,6 +416,12 @@ export const IMAGES: GlassImage[] = [
 ];
 
 export const TEXTURES: Credit[] = [
+  {"title": "실사 인물 3D 모델 (방문자·신자)", "author": "Microsoft Rocketbox Avatar Library", "license": "MIT", "source": "https://github.com/microsoft/Microsoft-Rocketbox"},
+  {"title": "성모자상 (브뤼헤의 성모) 3D 스캔", "author": "미켈란젤로 원작 · Statens Museum for Kunst 석고 복제품 스캔", "license": "Public domain", "source": "https://commons.wikimedia.org/wiki/File:Michelangelo_Buonarroti,_Maria_siddende_med_barnet,_Br%C3%BCggemadonna,_,_KAS225,_Statens_Museum_for_Kunst,_3D_model.stl"},
+  {"title": "피에타 3D 스캔", "author": "미켈란젤로 원작 · Statens Museum for Kunst 석고 복제품 스캔", "license": "Public domain", "source": "https://commons.wikimedia.org/wiki/File:Michelangelo_Buonarroti,_Maria_med_den_d%C3%B8de_Jesus,_Peterskirkepiet%C3%A0,_,_KAS115,_Statens_Museum_for_Kunst,_3D_model.stl"},
+  {"title": "정원 관목 (shrub_02)", "author": "Rico Cilliers · Poly Haven", "license": "CC0", "source": "https://polyhaven.com/a/shrub_02"},
+  {"title": "바위 (boulder_01)", "author": "Rico Cilliers · Poly Haven", "license": "CC0", "source": "https://polyhaven.com/a/boulder_01"},
+  {"title": "정원 벤치 (painted_wooden_bench)", "author": "Kirill Sannikov · Poly Haven", "license": "CC0", "source": "https://polyhaven.com/a/painted_wooden_bench"},
   {
     "title": "대리석 바닥 (밀라노 대성당)",
     "author": "Gerda Arendt",

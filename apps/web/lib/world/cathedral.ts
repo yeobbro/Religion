@@ -6,6 +6,7 @@ import {
 } from './textures';
 import { image } from './credits';
 import { createCrucifix, createMarianStatue, disposeGroup } from './statues';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 /**
  * The visitable site in metres: a Gothic cathedral (nave, aisles, apse, side Marian altar,
@@ -672,6 +673,37 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   }
 
   // ---------- Marian side altar (north aisle, east end) ----------
+  // Real sculpture: 3D scans of Michelangelo plaster casts (Statens Museum for Kunst, public domain).
+  // Each replaces a hand-made stand-in once loaded; `upZ` marks scans authored with Z up.
+  const marble = mat(new THREE.MeshStandardMaterial({ color: '#efe8db', roughness: 0.42, metalness: 0, emissive: '#1a1712' }));
+  const statueModel = (url: string, at: { x: number; y: number; z: number; ry: number; h: number; upZ?: boolean }, standIn?: THREE.Object3D) => {
+    new GLTFLoader().load(url, g => {
+      const inner = g.scene;
+      if (at.upZ) inner.rotation.x = -Math.PI / 2;
+      inner.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.geometry.computeVertexNormals();
+        m.material = marble;
+        m.castShadow = true; m.receiveShadow = true;
+        disposables.push(m.geometry);
+      });
+      const wrap = new THREE.Group();
+      wrap.add(inner);
+      wrap.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(wrap);
+      const k = at.h / (box.max.y - box.min.y);
+      wrap.scale.setScalar(k);
+      const c = box.getCenter(new THREE.Vector3());
+      inner.position.set(-c.x, -box.min.y, -c.z);
+      const holder = new THREE.Group();
+      holder.add(wrap);
+      holder.position.set(at.x, at.y, at.z);
+      holder.rotation.y = at.ry;
+      group.add(holder);
+      if (standIn) standIn.visible = false;
+    });
+  };
   const maryX = -11.0, maryZ = Z_E + 1.6;
   box('stoneDark', 3.4, 0.25, 2.4, maryX, 0.125, maryZ - 0.2);
   box('stone', 1.2, 1.15, 0.9, maryX, 0.25 + 0.575, maryZ - 0.3);
@@ -684,6 +716,8 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   const mary = createMarianStatue();
   mary.position.set(maryX, 1.46, maryZ - 0.3);
   group.add(mary);
+  // Michelangelo's Bruges Madonna (Our Lady with the Child), from a scan of the cast.
+  statueModel('/models/statues/bruges-madonna.glb', { x: maryX, y: 1.46, z: maryZ - 0.3, ry: 0, h: 1.55, upZ: true }, mary);
   const marySpot = new THREE.SpotLight('#fff0d6', 60, 10, 0.45, 0.6, 1.5);
   marySpot.position.set(maryX + 1.5, 5.5, maryZ + 3);
   marySpot.target.position.set(maryX, 2.3, maryZ - 0.3);
@@ -735,6 +769,10 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   box('linen', 2.5, 0.03, 0.95, tX, 1.015, Z_E + 0.9);
   box('gold', 0.8, 0.4, 0.03, tX, 0.6, Z_E + 1.33);
   for (const dx of [-0.8, -0.4, 0.4, 0.8]) { cyl('gold', 0.04, 0.06, 0.06, tX + dx, 1.06, Z_E + 0.75, 10); candle(tX + dx, 1.09, Z_E + 0.75, 0.32, 0.02); }
+  // Michelangelo's Pietà on a plinth before the side altar.
+  box('stone', 1.9, 0.7, 1.1, tX, 0.35, Z_E + 2.9, true);
+  box('gold', 1.95, 0.05, 1.15, tX, 0.72, Z_E + 2.9);
+  statueModel('/models/statues/pieta.glb', { x: tX, y: 0.745, z: Z_E + 2.9, ry: 0, h: 1.55 });
   const titianSpot = new THREE.SpotLight('#fff0d8', 45, 12, 0.5, 0.6, 1.5);
   titianSpot.position.set(tX - 1.0, 7.5, Z_E + 5.5);
   titianSpot.target.position.set(tX, 4.0, Z_E);
@@ -972,6 +1010,28 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   // Steps up to the portal (decorative edge stones on the plaza).
   for (let k = 0; k < 3; k += 1) box('stoneDark', 9 - k * 0.8, 0.06, 0.4, 0, 0.03, FZ + 0.9 + k * 0.4);
   // Hedges lining the walk and plaza.
+  // Photogrammetry / photo-textured models (Poly Haven, CC0), loaded after the first frame.
+  const gltf = new GLTFLoader();
+  const realModel = (url: string, places: { x: number; y?: number; z: number; ry?: number; s?: number | [number, number, number] }[], shadow = true) => {
+    gltf.load(url, g => {
+      g.scene.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = shadow; m.receiveShadow = true;
+        const mt = m.material as THREE.MeshStandardMaterial;
+        if (mt.map) mt.map.anisotropy = maxAniso;
+        disposables.push(m.geometry, mt);
+      });
+      for (const p of places) {
+        const c = g.scene.clone();
+        c.position.set(p.x, p.y ?? 0, p.z);
+        c.rotation.y = p.ry ?? 0;
+        const sc = p.s ?? 1;
+        if (Array.isArray(sc)) c.scale.set(...sc); else c.scale.setScalar(sc);
+        group.add(c);
+      }
+    });
+  };
   const hedge = (x: number, z: number, w: number, d: number) => {
     bake('leafDark', new THREE.BoxGeometry(w, 0.9, d, 1, 1, 1), x, 0.45, z);
     bake('leaf', new THREE.SphereGeometry(0.5, 10, 6), x, 0.85, z, 0, 0, 0, w, 0.3, d);
@@ -982,6 +1042,13 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     hedge(s * 3.0, FZ + 36.5, 0.8, 9);
     hedge(s * 14.5, FZ + 7.5, 0.8, 12);
   }
+  // Real shrubs in front of the hedges and around the plaza.
+  const shrubs: { x: number; z: number; ry: number; s: number }[] = [];
+  for (const s2 of [-1, 1]) {
+    for (const z of [FZ + 17, FZ + 21, FZ + 25, FZ + 33, FZ + 37, FZ + 41]) shrubs.push({ x: s2 * 3.0, z, ry: z * 1.7, s: 0.55 });
+    for (const z of [FZ + 3, FZ + 7.5, FZ + 12]) shrubs.push({ x: s2 * 14.5, z, ry: z, s: 0.6 });
+  }
+  realModel('/models/nature/shrub-02.glb', shrubs);
   // Cypress avenue and broad trees.
   const cypress = (x: number, z: number, h = 7) => {
     cyl('bark', 0.12, 0.18, 1.0, x, 0.5, z, 6);
@@ -1027,11 +1094,10 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   for (const z of [FZ + 12, FZ + 24, FZ + 35]) for (const s of [-1, 1]) lamp(s * 2.4, z);
   // Garden benches; each has two places to sit, facing the way the bench faces (ry, like a yaw).
   const benchSeats: BenchSeat[] = [];
+  const benchPlaces: { x: number; z: number; ry: number; s: [number, number, number] }[] = [];
   const bench = (x: number, z: number, ry: number) => {
     const sn = Math.sin(ry), cs = Math.cos(ry);
-    box('wood', 2.0, 0.07, 0.5, x, 0.46, z, false, ry);
-    box('wood', 2.0, 0.45, 0.06, x + 0.24 * sn, 0.75, z + 0.24 * cs, false, ry);
-    for (const dx of [-0.75, 0.75]) box('iron', 0.06, 0.44, 0.46, x + dx * cs, 0.22, z - dx * sn, false, ry);
+    benchPlaces.push({ x, z, ry, s: [1.6, 1.0, 1.05] });
     const across = Math.abs(cs) > 0.5;
     block(x, z, across ? 1.0 : 0.3, across ? 0.3 : 1.0, true);
     for (const off of [-0.5, 0.5]) {
@@ -1100,6 +1166,13 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   // Benches facing the grotto, for sitting with Our Lady in the garden.
   bench(gX - 5.0, gZ - 2.0, -Math.PI / 2);
   bench(gX - 5.0, gZ + 2.0, -Math.PI / 2);
+  realModel('/models/nature/painted-wooden-bench.glb', benchPlaces);
+  // Weathered boulders around the grotto, from photographed rock.
+  realModel('/models/nature/boulder-01.glb', [
+    { x: gX + 0.2, z: gZ - 3.2, ry: 0.4, s: 1.5 }, { x: gX + 0.4, z: gZ + 3.3, ry: 2.2, s: 1.6 },
+    { x: gX + 2.6, z: gZ - 2.0, ry: 1.1, s: 2.2 }, { x: gX + 2.8, z: gZ + 2.0, ry: 3.0, s: 2.0 },
+    { x: gX + 2.3, y: 2.4, z: gZ, ry: 0.8, s: 2.4 }, { x: gX - 1.6, z: gZ - 2.6, ry: 5.0, s: 0.7 },
+  ]);
 
   // Sky dome with a low sun glow, and a ring of distant hills.
   // Photographed sky (Poly Haven HDRI, tonemapped, CC0) on an equirectangular dome.

@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import * as THREE from 'three';
-import { Avatar, type Outfit } from '@/lib/world/avatar';
+import { Avatar } from '@/lib/world/avatar';
+import { HumanAvatar, lookById } from '@/lib/world/human';
 import { buildSite, type Blocker, type Site } from '@/lib/world/cathedral';
 import { createNpcs } from '@/lib/world/npcs';
 import { beamTexture, glowTexture } from '@/lib/world/textures';
 import RosaryPanel from './RosaryPanel';
 import { PHRASES, joinServer, showBubble, type Presence } from '@/lib/world/presence';
 
-export type Visitor = { name: string; outfit: Outfit; server: number };
+export type Visitor = { name: string; look: string; server: number };
 export type PresenceInfo = { server: number; count: number; status: 'connecting' | 'online' | 'offline' };
 type Props = {
   /** Null until the visitor enters; the world renders behind the entry screen meanwhile. */
@@ -178,7 +179,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
   const toastRef = useRef(toast);
   toastRef.current = toast;
   const [entered, setEntered] = useState(false);
-  const [outfit, setOutfit] = useState<Outfit>('casual');
+  const [gender, setGender] = useState<'female' | 'male'>('female');
   const onIndoorRef = useRef(onIndoor);
   onIndoorRef.current = onIndoor;
   const onPresenceRef = useRef(onPresence);
@@ -423,12 +424,12 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     let myBubbleT = 0;
     let disposed = false;
     const connect = (v: Visitor) => {
-      if (presence?.server === v.server) { presence.setProfile({ name: v.name, outfit: v.outfit }); return; }
+      if (presence?.server === v.server) { presence.setProfile({ name: v.name, look: v.look }); return; }
       presence?.leave();
       presence = null;
       const ticket = ++joining;
       onPresenceRef.current?.({ server: v.server, count: 1, status: 'connecting' });
-      joinServer(v.server, { name: v.name, outfit: v.outfit }, scene, {
+      joinServer(v.server, { name: v.name, look: v.look }, scene, {
         onCount: n => onPresenceRef.current?.({ server: v.server, count: n, status: 'online' }),
         onArrive: name => toastRef.current(`${name}님이 성당에 들어오셨어요`, 'in'),
         onDepart: name => toastRef.current(`${name}님이 평화 속에 떠나셨어요`, 'out'),
@@ -449,12 +450,13 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     };
     let current: Visitor | null = null;
     const setVisitor = (v: Visitor) => {
-      const rebuild = !current || current.name !== v.name || current.outfit !== v.outfit;
+      const rebuild = !current || current.name !== v.name || current.look !== v.look;
       current = v;
       connect(v);
       if (!rebuild) return;
       const old = avatar;
-      const next = new Avatar({ name: v.name, outfit: v.outfit });
+      const look = lookById(v.look);
+      const next = new HumanAvatar({ name: v.name, look });
       next.root.position.copy(old.root.position);
       next.root.rotation.y = old.root.rotation.y;
       next.setPosture(old.posture, 0.48);
@@ -465,7 +467,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       old.dispose();
       scene.add(next.root);
       avatar = next;
-      setOutfit(v.outfit);
+      setGender(look.gender);
       if (!inWorld) {
         inWorld = true;
         setEntered(true);
@@ -1001,7 +1003,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     };
   }, []);
 
-  const visitorKey = visitor ? `${visitor.name}|${visitor.outfit}|${visitor.server}` : '';
+  const visitorKey = visitor ? `${visitor.name}|${visitor.look}|${visitor.server}` : '';
   useEffect(() => {
     if (visitor && !loading) apiRef.current?.setVisitor(visitor);
     // Rebuild only when the name or outfit actually changes.
@@ -1110,7 +1112,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 <L long={state.sitting ? '일어나기' : '앉기'} short={state.sitting ? '일어나기' : '앉기'} /> <kbd>Space</kbd></button>
         <button type="button" className="secondary" aria-pressed={state.rosary} onClick={() => { setMoreOpen(false); act('rosary'); }}>📿 {state.rosary ? '묵주 내려놓기' : '묵주기도'}</button>
         <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('candle'); }}>🕯 초 봉헌</button>
-        {outfit === 'casual' || outfit === 'dress'
+        {gender === 'female'
           ? <button type="button" className="secondary" aria-pressed={state.veil} onClick={() => { setMoreOpen(false); act('veil'); }}>⛑ {state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
           : null}
         <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('bow'); }}>🙇 목례</button>

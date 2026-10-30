@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import ImmersiveAvatarScene, { type PresenceInfo, type Visitor } from './ImmersiveAvatarScene';
 import { SERVERS } from '@/lib/world/presence';
-import { VISITOR_OUTFITS, type Outfit } from '@/lib/world/avatar';
+import { LOOKS, type Gender } from '@/lib/world/human';
 import { AMBIENCE, IMAGES, PRAYERS, TEXTURES, TRACKS, type Track } from '@/lib/world/credits';
 
 const BAPTISMAL_NAMES = [
@@ -13,16 +13,6 @@ const BAPTISMAL_NAMES = [
   '실비아', '젬마', '헬레나', '이냐시오', '글라라', '율리아나', '대건 안드레아', '바르바라', '마태오', '루카',
 ];
 const randomName = () => BAPTISMAL_NAMES[Math.floor(Math.random() * BAPTISMAL_NAMES.length)];
-
-const OUTFIT_SWATCH: Record<Outfit, [string, string]> = {
-  casual: ['#ecdcc4', '#47546e'],
-  dress: ['#fbf8f2', '#eadfc6'],
-  nun: ['#1d1e26', '#fbf8f3'],
-  monk: ['#6b4a31', '#f2eee6'],
-  priest: ['#f7f4ec', '#2f6a46'],
-  server: ['#1b1b20', '#f7f4ec'],
-  choir: ['#6e1f2a', '#fbf8f3'],
-};
 
 const TOTAL = TRACKS.reduce((a, t) => a + t.duration, 0);
 /**
@@ -42,7 +32,8 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 export default function CatholicWorld() {
   const [visitor, setVisitor] = useState<Visitor | null>(null);
   const [name, setName] = useState('');
-  const [outfit, setOutfit] = useState<Outfit>('casual');
+  const [gender, setGender] = useState<Gender>('female');
+  const [look, setLook] = useState('f-dress');
   const [ready, setReady] = useState(false);
   const [credits, setCredits] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
@@ -171,7 +162,7 @@ export default function CatholicWorld() {
   const enter = (e?: FormEvent) => {
     e?.preventDefault();
     const n = name.trim().slice(0, 16) || randomName();
-    setVisitor({ name: n, outfit, server });
+    setVisitor({ name: n, look, server });
     const url = new URL(window.location.href);
     url.searchParams.set('server', String(server));
     window.history.replaceState(null, '', url);
@@ -277,7 +268,7 @@ export default function CatholicWorld() {
               <h2>출처와 저작권</h2>
               <button type="button" className="panel-x" onClick={() => setCredits(false)} aria-label="닫기">×</button>
             </header>
-            <p className="credits-lead">이 공간의 사진·음원은 공개 라이선스 자료와 KREWX가 제공한 레퍼런스 이미지를 사이트에서 직접 제공합니다. 성당 건축, 조각상, 인물은 코드로 만든 창작물입니다.</p>
+            <p className="credits-lead">이 공간의 사진·음원은 공개 라이선스 자료와 KREWX가 제공한 레퍼런스 이미지를 사이트에서 직접 제공합니다. 성모자상과 피에타는 미켈란젤로 작품 복제품의 3D 스캔이고, 사람은 실사 3D 모델입니다. 성당 건축과 나머지 성물은 코드로 만든 창작물입니다.</p>
             <h3>성가 · 음악</h3>
             <ul>{TRACKS.map(t => <li key={t.id}><b>{t.title}</b> — {t.composer} · 연주/녹음 {t.performer} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
             <h3>기도문 · 기도 노래</h3>
@@ -286,7 +277,7 @@ export default function CatholicWorld() {
             <ul>{AMBIENCE.map(t => <li key={t.id}><b>{t.title}</b> — {t.author} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
             <h3>스테인드글라스 · 명화</h3>
             <ul>{IMAGES.map(t => <li key={t.id}><b>{t.title}</b> — {t.author} · {t.license}{t.source.startsWith('http') ? <> · <a href={t.source} target="_blank" rel="noreferrer">원본</a></> : null}</li>)}</ul>
-            <h3>재질 · 하늘</h3>
+            <h3>3D 모델 · 재질 · 하늘</h3>
             <ul>{TEXTURES.map(t => <li key={t.title}><b>{t.title}</b> — {t.author} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
           </section>
         </div>
@@ -302,12 +293,19 @@ export default function CatholicWorld() {
               <span>세례명</span>
               <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder={`${placeholder} (비워두면 자동으로 정해져요)`} autoComplete="off" />
             </label>
-            <fieldset className="entry-outfits">
-              <legend>옷차림</legend>
-              {VISITOR_OUTFITS.map(o => (
-                <label key={o.id} className={outfit === o.id ? 'on' : ''}>
-                  <input type="radio" name="outfit" value={o.id} checked={outfit === o.id} onChange={() => setOutfit(o.id)} />
-                  <i style={{ background: `linear-gradient(135deg, ${OUTFIT_SWATCH[o.id][0]} 55%, ${OUTFIT_SWATCH[o.id][1]} 55%)` }} aria-hidden="true" />
+            <div className="entry-gender" role="radiogroup" aria-label="성별">
+              {(['female', 'male'] as const).map(g => (
+                <button key={g} type="button" role="radio" aria-checked={gender === g}
+                  onClick={() => { setGender(g); setLook(LOOKS.find(l => l.gender === g)!.id); }}>{g === 'female' ? '여성' : '남성'}</button>
+              ))}
+            </div>
+            <fieldset className="entry-outfits looks">
+              <legend>미사 옷차림</legend>
+              {LOOKS.filter(l => l.gender === gender).map(o => (
+                <label key={o.id} className={look === o.id ? 'on' : ''}>
+                  <input type="radio" name="look" value={o.id} checked={look === o.id} onChange={() => setLook(o.id)} />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/models/people/thumbs/${o.id}.jpg`} alt="" />
                   <b>{o.label}</b>
                   <small>{o.hint}</small>
                 </label>

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Avatar, type Gesture, type HandsMode, type Outfit, type Posture } from './avatar';
+import { Avatar, type Gesture, type HandsMode, type Posture } from './avatar';
+import { HumanAvatar, LOOKS, lookById } from './human';
 
 /**
  * Shared presence: visitors on the same "server" (a named room) see each other walk, sit,
@@ -16,9 +17,9 @@ export const SERVER_CAPACITY = 30;
 const APP_ID = 'krewx-religion-catholic-v1';
 const RELAYS = ['wss://nos.lol', 'wss://relay.primal.net', 'wss://nostr.mom', 'wss://relay.nostr.net'];
 
-export type Profile = { name: string; outfit: Outfit };
+export type Profile = { name: string; look: string };
 type Wire =
-  | { t: 'hi'; name: string; outfit: Outfit }
+  | { t: 'hi'; name: string; look?: string; outfit?: string }
   | { t: 's'; x: number; z: number; y: number; p: Posture; h: HandsMode; v: 0 | 1 }
   | { t: 'g'; g: Gesture }
   | { t: 'c'; slot: number; st?: number }
@@ -94,7 +95,7 @@ export async function joinServer(
   server: number,
   profile: Profile,
   scene: THREE.Scene,
-  hooks: { onCount: (n: number) => void; onCandle: (stand: number, slot: number) => void; onError?: (msg: string) => void; onArrive?: (name: string, outfit: Outfit) => void; onDepart?: (name: string) => void; onAlreadyHere?: (names: string[]) => void },
+  hooks: { onCount: (n: number) => void; onCandle: (stand: number, slot: number) => void; onError?: (msg: string) => void; onArrive?: (name: string) => void; onDepart?: (name: string) => void; onAlreadyHere?: (names: string[]) => void },
 ): Promise<Presence> {
   const { joinRoom, getRelaySockets } = await import('trystero');
   if (process.env.NODE_ENV !== 'production') (window as unknown as { __socks?: () => unknown }).__socks = () => Object.fromEntries(Object.entries(getRelaySockets() as Record<string, WebSocket>).map(([k, v]) => [k, v.readyState]));
@@ -136,7 +137,7 @@ export async function joinServer(
     if (!p.profile) return;
     const pos = p.avatar?.root.position.clone() ?? p.target.clone();
     if (p.avatar) { scene.remove(p.avatar.root); p.avatar.dispose(); }
-    const a = new Avatar({ name: p.profile.name, outfit: p.profile.outfit, lite: true, rosary: true });
+    const a: Avatar = new HumanAvatar({ name: p.profile.name, look: lookById(p.profile.look) });
     a.root.position.copy(pos);
     a.root.rotation.y = p.yaw;
     a.root.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; });
@@ -148,7 +149,7 @@ export async function joinServer(
     p.avatar = a;
   };
 
-  const sendHi = (target?: string) => chan.send({ t: 'hi', name: me.name, outfit: me.outfit }, target ? { target } : undefined).catch(() => undefined);
+  const sendHi = (target?: string) => chan.send({ t: 'hi', name: me.name, look: me.look }, target ? { target } : undefined).catch(() => undefined);
 
   const dbg = (m: string) => { if (process.env.NODE_ENV !== 'production') ((window as unknown as { __pres?: string[] }).__pres ??= []).push(m); };
   room.onPeerJoin = id => {
@@ -166,12 +167,13 @@ export async function joinServer(
     p.lastSeen = performance.now();
     if (m.t === 'hi') {
       const name = String(m.name ?? '').slice(0, 16) || '순례자';
-      const changed = !p.profile || p.profile.name !== name || p.profile.outfit !== m.outfit;
+      const look = LOOKS.some(l => l.id === m.look) ? m.look! : LOOKS[0].id;
+      const changed = !p.profile || p.profile.name !== name || p.profile.look !== look;
       if (!p.profile) {
         if (performance.now() - joinedAt < 6000) alreadyHere.push(name);
-        else hooks.onArrive?.(name, m.outfit);
+        else hooks.onArrive?.(name);
       }
-      p.profile = { name, outfit: m.outfit };
+      p.profile = { name, look };
       if (changed) { build(p); emitCount(); }
     } else if (m.t === 's') {
       const first = !p.avatar;
