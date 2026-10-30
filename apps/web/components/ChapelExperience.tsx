@@ -11,6 +11,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
 const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || 'https://upload.wikimedia.org/wikipedia/commons/9/96/Veni.sancte.spiritus.ogg';
+const gardenAudioUrl = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Gentle_breeze_and_birds_singing.ogg';
 
 export default function ChapelExperience() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -68,6 +69,14 @@ export default function ChapelExperience() {
     audioRef.current.volume = volume;
   }, [volume]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setIsPlaying(false);
+  }, [space]);
+
   const addIntention = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = intention.trim();
@@ -101,7 +110,7 @@ export default function ChapelExperience() {
 
   const toggleAudio = async () => {
     const audio = audioRef.current;
-    if (!audio || !audioUrl) { setNotice('성가 음원 URL이 아직 연결되지 않았어요. 사용 권한이 확인된 녹음을 연결해 주세요.'); return; }
+    if (!audio) { setNotice('오디오 플레이어를 준비하지 못했어요.'); return; }
     if (isPlaying) { audio.pause(); setIsPlaying(false); }
     else { try { await audio.play(); setIsPlaying(true); } catch { setNotice('음원을 재생할 수 없어요. 음원 주소를 확인해 주세요.'); } }
   };
@@ -129,9 +138,9 @@ export default function ChapelExperience() {
           <p className="micro-copy">성당 안에 밝혀진 촛불 {sceneCandles}개와 함께 잠시 침묵하며 기도해 보세요.</p>
         </section>
         <section className="panel chant-panel">
-          <div className="section-kicker">03 / GREGORIAN CHANT</div><div className="chant-layout"><div><h2>고요히 흐르는 성가</h2><p className="section-intro">그레고리오 성가와 함께 기도의 시간을 가져보세요.</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>Veni Sancte Spiritus</strong><small>그레고리오 성가 · 성령 송가</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
-          {audioUrl && <audio ref={audioRef} src={audioUrl} loop preload="none" onEnded={()=>setIsPlaying(false)} onPause={()=>setIsPlaying(false)} onPlay={()=>setIsPlaying(true)} />}
-          <div className="chant-footnote">음원: Membeth · Wikimedia Commons · Public Domain. <a href="https://commons.wikimedia.org/wiki/File:Veni.sancte.spiritus.ogg" target="_blank" rel="noreferrer">원본 및 이용 정보</a></div>
+          <div className="section-kicker">03 / {space === 'chapel' ? 'GREGORIAN CHANT' : 'GARDEN AMBIENCE'}</div><div className="chant-layout"><div><h2>{space === 'chapel' ? '고요히 흐르는 성가' : '정원에 머무는 자연의 소리'}</h2><p className="section-intro">{space === 'chapel' ? '그레고리오 성가와 함께 기도의 시간을 가져보세요.' : '산들바람과 새소리가 흐르는 정원에서 잠시 쉬어가세요.'}</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>{space === 'chapel' ? 'Veni Sancte Spiritus' : 'Gentle Breeze and Birds'}</strong><small>{space === 'chapel' ? '그레고리오 성가 · 성령 송가' : '정원 자연음 · 산들바람과 새소리'}</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
+          <audio ref={audioRef} src={space === 'chapel' ? audioUrl : gardenAudioUrl} loop preload="none" onEnded={()=>setIsPlaying(false)} onPause={()=>setIsPlaying(false)} onPlay={()=>setIsPlaying(true)} />
+          <div className="chant-footnote">{space === 'chapel' ? <>음원: Membeth · Wikimedia Commons · Public Domain. <a href="https://commons.wikimedia.org/wiki/File:Veni.sancte.spiritus.ogg" target="_blank" rel="noreferrer">원본 및 이용 정보</a></> : <>음원: ezwa · Wikimedia Commons · Public Domain. <a href="https://commons.wikimedia.org/wiki/File:Gentle_breeze_and_birds_singing.ogg" target="_blank" rel="noreferrer">원본 및 이용 정보</a></>}</div>
         </section>
       </div>
       <footer className="footer"><span>RELIGION © 2026</span><span>가상 기도 공간은 실제 미사와 성사를 대체하지 않습니다.</span></footer>
