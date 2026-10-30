@@ -295,3 +295,79 @@
 
 .world-asset-credit a{color:#f0dfbd;text-decoration:underline;text-underline-offset:2px}
 .world-asset-credit a:hover{color:#fff2d5}
+
+
+/* Visible system cursor and a stable, centered devotional action dock. */
+.immersive-avatar-canvas,
+.immersive-avatar-canvas canvas,
+.immersive-avatar-canvas:active {
+  cursor: default !important;
+}
+.world-action-bar {
+  left: 50%;
+  right: auto;
+  bottom: 20px;
+  transform: translateX(-50%);
+  width: min(980px, calc(100vw - 40px));
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  justify-content: center;
+  gap: 8px;
+}
+.world-action-bar button {
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid rgba(229, 210, 173, .62);
+  background: rgba(24, 28, 24, .9);
+  font-size: 11px;
+  letter-spacing: .015em;
+}
+.world-action-notice {
+  left: 50%;
+  right: auto;
+  bottom: 82px;
+  transform: translateX(-50%);
+  width: min(680px, calc(100vw - 48px));
+  max-width: none;
+  text-align: center;
+  border-radius: 14px;
+  background: rgba(18, 22, 19, .76);
+}
+.world-action-bar button:focus-visible {
+  outline: 2px solid #f0d8a8;
+  outline-offset: 3px;
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .world-action-bar {
+    left: 140px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+    width: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .world-action-bar button {
+    min-height: 35px;
+    padding: 0 6px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+  .world-action-notice {
+    left: 140px;
+    right: 12px;
+    bottom: 184px;
+    width: auto;
+    padding: 7px 9px;
+    font-size: 8px;
+    text-align: right;
+    border-radius: 12px;
+    transform: none;
+  }
+  .holy-water-actions {
+    bottom: 236px !important;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
