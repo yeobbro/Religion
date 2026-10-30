@@ -544,6 +544,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         }
         addCylinder(world, 0.22, 0.32, 3.6, makeMat('#67513a'), side * (10.8 + (i % 2) * 1.1), 1.8, z, 12, true);
         const treeX = side * (10.8 + (i % 2) * 1.1);
+        addBlocker(treeX, z, 1.55, 1.55);
         for (let layer = 0; layer < 3; layer += 1) {
           const crown = addMesh(world, new THREE.IcosahedronGeometry(1.65 - layer * 0.12, 1), makeMat(layer === 1 ? '#58774f' : '#6d895f', 0.98), treeX + (layer % 2 ? 0.22 : -0.12), 3.0 + layer * 0.72, z, true, true);
           crown.scale.set(1.1, 0.95, 1.05);
@@ -698,6 +699,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       const lantern = new THREE.Group();
       lantern.position.set(x, 0, 28.5);
       world.add(lantern);
+      addBlocker(x, 28.5, 0.25, 0.25);
       addCylinder(lantern, 0.15, 0.2, 1.55, darkWood, 0, 0.78, 0, 12);
       const lampGlass = addMesh(lantern, new THREE.SphereGeometry(0.19, 12, 10), new THREE.MeshBasicMaterial({ color: '#ffdf9d' }), 0, 1.65, 0, false, false);
       lampGlass.scale.y = 1.3;
@@ -1127,7 +1129,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) pointerMoved = true;
       if (pointerMoved) {
         yaw += dx * (pointerTouch ? 0.009 : 0.0075);
-        pitch = THREE.MathUtils.clamp(pitch - dy * (pointerTouch ? 0.008 : 0.007), -0.92, 0.36);
+        pitch = THREE.MathUtils.clamp(pitch - dy * (pointerTouch ? 0.008 : 0.007), -0.72, 0.72);
       }
       lastX = event.clientX; lastY = event.clientY;
     };
