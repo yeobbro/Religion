@@ -99,6 +99,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     // Photo-scanned PBR stone from Poly Haven (CC0) for the cathedral masonry.
     const textureLoader = new THREE.TextureLoader();
+    textureLoader.setCrossOrigin('anonymous');
     const stoneColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_diff_2k.jpg');
     const stoneNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_nor_gl_2k.jpg');
     const stoneRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_rough_2k.jpg');
@@ -108,11 +109,17 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       texture.repeat.set(12, 7);
     });
     stoneColorMap.colorSpace = THREE.SRGBColorSpace;
-    const cathedralInteriorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Cathedral_Interior_with_Stained_Glass_and_Altar_%2855260745408%29.jpg/768px-Cathedral_Interior_with_Stained_Glass_and_Altar_%2855260745408%29.jpg');
-    const maryShrinePhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/EstatuaGrutadeLourdes-MDP.jpg/768px-EstatuaGrutadeLourdes-MDP.jpg');
-    cathedralInteriorPhoto.colorSpace = THREE.SRGBColorSpace;
-    maryShrinePhoto.colorSpace = THREE.SRGBColorSpace;
-    loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto);
+    // Actual photographs licensed for reuse: nave (CC BY-SA 4.0), grotto (CC BY 4.0),
+    // marble floor (CC0), vaulted ceiling (CC0), and cathedral facade (CC BY-SA 4.0).
+    const cathedralInteriorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Interior_of_St._Vitus_Cathedral%2C_Nave%2C_Prague_20160809_1.jpg/1280px-Interior_of_St._Vitus_Cathedral%2C_Nave%2C_Prague_20160809_1.jpg');
+    const maryShrinePhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/The_Lourdes_Grotto.jpg/1280px-The_Lourdes_Grotto.jpg');
+    const marbleFloorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Milan_Cathedral%2C_floor.jpg/1280px-Milan_Cathedral%2C_floor.jpg');
+    const vaultedCeilingPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Gloucester_Cathedral_Vaulted_Ceiling.jpg/1356px-Gloucester_Cathedral_Vaulted_Ceiling.jpg');
+    const exteriorFacadePhoto = textureLoader.load('https://commons.wikimedia.org/wiki/Special:FilePath/Notre_Dame_Cathedral_Facade.jpg?width=1600');
+    for (const texture of [cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto]) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+    }
+    loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto, marbleFloorPhoto, vaultedCeilingPhoto, exteriorFacadePhoto);
 
     const woodColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_diff_2k.jpg');
     const woodNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_planks/wooden_planks_nor_gl_2k.jpg');
@@ -128,7 +135,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const plaster = makeMat('#d7d0c0', 0.94, 0, makeNoiseTexture('#d7d0c0', 2, 4, 3));
     const darkPlaster = makeMat('#938d80', 0.94, 0, makeNoiseTexture('#938d80', 4, 3, 2));
     const darkStone = makeMat('#53564e', 0.91, 0, makeNoiseTexture('#53564e', 18, 3, 2));
-    const floorStone = makeMat('#827e72', 0.88, 0, makeNoiseTexture('#827e72', 6, 8, 14));
+    const floorStone = makeMat('#ffffff', 0.88, 0, marbleFloorPhoto);
+    marbleFloorPhoto.wrapS = marbleFloorPhoto.wrapT = THREE.ClampToEdgeWrapping;
+    marbleFloorPhoto.repeat.set(1, 1);
     const aisleStone = makeMat('#a28a67', 0.78, 0, makeNoiseTexture('#a28a67', 8, 2, 12));
     const trim = makeMat('#b49a6b', 0.42, 0.42);
     const wood = makeMat('#523d2b', 0.7, 0, makeNoiseTexture('#523d2b', 10, 3, 2));
@@ -198,16 +207,19 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     // Outside ground begins before the threshold and continues well into the garden.
     addGroundPlane(world, 60, 100, grassMat, 0, -0.24, 38);
     addGroundPlane(world, 29.0, 42, floorStone, 0, -0.1, -1);
-    for (let x = -14; x <= 14; x += 2) {
-      for (let z = -20; z <= 18; z += 2) {
-        addMesh(world, new THREE.BoxGeometry(1.94, 0.035, 1.94), floorStone, x, -0.075, z, false, true);
-      }
-    }
+    // One continuous high-resolution marble photograph replaces the repeated procedural floor tiles.
     addGroundPlane(world, 3.4, 40, aisleStone, 0, -0.045, -1);
     addGroundPlane(world, 5.4, 48, pathMat, 0, -0.035, 39);
 
     // CHURCH: long nave, side aisles, side walls and vaulted ceiling.
     addBox(world, 29.0, 0.65, 42, darkPlaster, 0, 22.15, -1);
+    const ceilingPhotoMaterial = new THREE.MeshStandardMaterial({
+      map: vaultedCeilingPhoto,
+      roughness: 0.96,
+      side: THREE.DoubleSide,
+    });
+    const ceilingPhotoPlane = addMesh(world, new THREE.PlaneGeometry(28.4, 41.2), ceilingPhotoMaterial, 0, 21.79, -1, false, false);
+    ceilingPhotoPlane.rotation.x = Math.PI / 2;
     addBox(world, 0.8, 21.6, 42, plaster, -14.4, 10.8, -1, true);
     addBox(world, 0.8, 21.6, 42, plaster, 14.4, 10.8, -1, true);
     addBox(world, 29.0, 21.6, 0.8, plaster, 0, 10.8, -22, true);
@@ -220,6 +232,14 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       addBox(world, 1.35, 0.42, 1.25, trim, x, 21.0, 19.15);
     }
 
+
+    // Real cathedral facade photograph as the distant exterior vista beyond the garden.
+    const exteriorFacadeMaterial = new THREE.MeshStandardMaterial({
+      map: exteriorFacadePhoto,
+      roughness: 0.94,
+      side: THREE.DoubleSide,
+    });
+    const exteriorFacadeBackdrop = addMesh(world, new THREE.PlaneGeometry(46, 32), exteriorFacadeMaterial, 0, 16, 75, false, false);
 
     // Monumental west facade: rose window and twin towers inspired by the great French Gothic cathedrals.
     const roseWindow = new THREE.Group();
@@ -583,10 +603,10 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     // Real Lourdes statue photograph is recessed behind a dimensional statue and arch.
     const maryImage = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.75, 2.25),
-      new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.92, side: THREE.DoubleSide })
+      new THREE.PlaneGeometry(2.2, 2.65),
+      new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.96, side: THREE.DoubleSide })
     );
-    maryImage.position.set(0.38, 2.55, 0);
+    maryImage.position.set(0.35, 2.55, 0);
     maryImage.rotation.y = -Math.PI / 2;
     maryGrotto.add(maryImage);
 
@@ -682,16 +702,13 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     // A real cathedral photograph is presented as a framed architectural reference panel
     // mounted on the side-aisle wall, integrated into the surrounding 3D masonry.
+    // Large real nave photograph on the sanctuary rear wall; 3D altar and crucifix remain in front.
     const cathedralPhotoPanel = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.55, 3.8),
-      new THREE.MeshStandardMaterial({ map: cathedralInteriorPhoto, roughness: 0.88, side: THREE.DoubleSide })
+      new THREE.PlaneGeometry(13.8, 10.6),
+      new THREE.MeshStandardMaterial({ map: cathedralInteriorPhoto, roughness: 0.96, side: THREE.DoubleSide })
     );
-    cathedralPhotoPanel.position.set(-13.92, 10.5, -7.8);
-    cathedralPhotoPanel.rotation.y = Math.PI / 2;
+    cathedralPhotoPanel.position.set(0, 9.2, -21.54);
     world.add(cathedralPhotoPanel);
-    addBox(world, 0.18, 4.0, 2.75, trim, -13.88, 10.5, -7.8);
-    addBox(world, 0.16, 0.15, 2.85, darkWood, -13.78, 12.55, -7.8);
-    addBox(world, 0.16, 0.15, 2.85, darkWood, -13.78, 8.45, -7.8);
 
     // Wooden benches and warm low garden lamps.
     for (const x of [-6.7, 7.1]) {
@@ -925,7 +942,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
 
     const keys = new Set<string>();
-    let yaw = 0, pitch = -0.05, cameraDistance = 6.8;
+    let yaw = 0, pitch = 0.08, cameraDistance = 3.8;
     let pointerDown = false, pointerMoved = false, pointerTouch = false;
     let lastX = 0, lastY = 0, downX = 0, downY = 0;
     let pinchDistance = 0, joystickX = 0, joystickY = 0;
@@ -1130,7 +1147,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) pointerMoved = true;
       if (pointerMoved) {
         yaw += dx * (pointerTouch ? 0.009 : 0.0075);
-        pitch = THREE.MathUtils.clamp(pitch - dy * (pointerTouch ? 0.008 : 0.007), -0.72, 0.72);
+        // Dragging downward raises the avatar's view toward the vault; the camera never dips below the floor.
+        pitch = THREE.MathUtils.clamp(pitch + dy * (pointerTouch ? 0.0065 : 0.0058), -0.34, 1.22);
       }
       lastX = event.clientX; lastY = event.clientY;
     };
@@ -1494,15 +1512,21 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       }
 
 
-      const focusHeight = isSitting ? 1.05 : 1.38;
+      const eyeHeight = isSitting ? 1.55 : 1.72;
+      // Shoulder-height follow camera: pitch changes only the viewing direction, never the camera's world height.
       cameraTarget.set(
         avatar.position.x - Math.sin(yaw) * cameraDistance,
-        focusHeight + 0.92 + Math.max(0, cameraDistance - 5.8) * 0.16,
+        eyeHeight,
         avatar.position.z + Math.cos(yaw) * cameraDistance,
       );
       camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
-      // Pitch rotates the view target, not the camera below the floor.
-      lookTarget.set(avatar.position.x, focusHeight + pitch * 8.0, avatar.position.z - 0.12);
+      const lookDistance = 14;
+      const viewHorizontal = Math.cos(pitch) * lookDistance;
+      lookTarget.set(
+        avatar.position.x + Math.sin(yaw) * viewHorizontal,
+        eyeHeight + Math.sin(pitch) * lookDistance,
+        avatar.position.z - Math.cos(yaw) * viewHorizontal,
+      );
       camera.lookAt(lookTarget);
 
       const fontDistance = Math.hypot(avatar.position.x + 2.2, avatar.position.z - 12);
@@ -1551,6 +1575,8 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       loadedTextures.forEach(texture => texture.dispose());
       labelTexture.dispose();
       marySignTexture.dispose();
+      ceilingPhotoMaterial.dispose();
+      exteriorFacadeMaterial.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
@@ -1623,9 +1649,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       </div>
       <div className="camera-touch-hint" aria-hidden="true">화면 드래그로 시점 변경 · 두 손가락 줌</div>
       <div className="world-asset-credit">
-        석재·목재 PBR: Poly Haven CC0 ·
-        <a href="https://commons.wikimedia.org/wiki/File:Cathedral_Interior_with_Stained_Glass_and_Altar_(55260745408).jpg" target="_blank" rel="noreferrer">성당 사진 Michael Gaylard · CC BY 4.0</a> ·
-        <a href="https://commons.wikimedia.org/wiki/File:EstatuaGrutadeLourdes-MDP.jpg" target="_blank" rel="noreferrer">마리아상 사진 Ezarate · CC BY-SA 4.0</a>
+        실제 성당 사진 자료 ·
+        <a href="https://commons.wikimedia.org/wiki/File:Notre_Dame_Cathedral_Facade.jpg" target="_blank" rel="noreferrer">정면 Marlaazriel · CC BY-SA 4.0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:Interior_of_St._Vitus_Cathedral,_Nave,_Prague_20160809_1.jpg" target="_blank" rel="noreferrer">내부 DXR · CC BY-SA 4.0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:Gloucester_Cathedral_Vaulted_Ceiling.jpg" target="_blank" rel="noreferrer">천장 Zhurakovskyi · CC0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:Milan_Cathedral,_floor.jpg" target="_blank" rel="noreferrer">바닥 Gerda Arendt · CC0</a> ·
+        <a href="https://commons.wikimedia.org/wiki/File:The_Lourdes_Grotto.jpg" target="_blank" rel="noreferrer">성모 기도처 ELeibiger · CC BY 4.0</a>
       </div>
     </div>
   );
