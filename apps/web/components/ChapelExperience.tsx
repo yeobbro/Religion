@@ -33,12 +33,15 @@ export default function ChapelExperience() {
     if (!quietRunning) return;
     const timer = window.setInterval(() => {
       setQuietSeconds(seconds => {
-        if (seconds <= 1) { setQuietRunning(false); return 0; }
-        return seconds - 1;
+        return Math.max(0, seconds - 1);
       });
     }, 1000);
     return () => window.clearInterval(timer);
   }, [quietRunning]);
+
+  useEffect(() => {
+    if (quietSeconds === 0) setQuietRunning(false);
+  }, [quietSeconds]);
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (!supabaseUrl || !supabaseKey) return;
