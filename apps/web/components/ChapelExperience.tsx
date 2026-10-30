@@ -78,8 +78,6 @@ export default function ChapelExperience() {
         const { count } = await supabase.from('prayer_intentions').select('id', { count: 'exact', head: true }).eq('parish_id', parishId).eq('is_public', true).gt('expires_at', new Date().toISOString());
         if (count !== null) setCandleCount(count);
       } else setNotice('기도 지향을 비공개로 봉헌했어요.');
-      else if (isPublic) setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]);
-      else setNotice('기도 지향을 비공개로 봉헌했어요.');
     } else {
       if (isPublic) { setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]); setCandleCount(count => count + 1); }
       else setNotice('기도 지향을 이 브라우저에서 비공개로 봉헌했어요. (데모 모드)');
