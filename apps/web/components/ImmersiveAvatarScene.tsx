@@ -357,7 +357,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
       if (!inWorld) {
         inWorld = true;
         setEntered(true);
-        say(`${v.name}님, 평화를 빕니다. 바닥을 클릭하거나 WASD·조이스틱으로 걸어 보세요.`);
+        say(`${v.name}님, 평화를 빕니다. 바닥을 클릭하거나 WASD(ㅈㅁㄴㅇ)·방향키로 걷고, 스페이스바로 빈자리에 앉아 보세요.`);
       }
       sync();
     };
@@ -573,12 +573,26 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
       if (!getUp(go)) go();
       sync();
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      if ((e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys.add(k); e.preventDefault(); }
+    // Movement keys by physical position, so a Korean keyboard (ㅈㅁㄴㅇ) works without switching to English.
+    const KEY_BY_CODE: Record<string, string> = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright' };
+    const KEY_BY_HANGUL: Record<string, string> = { 'ㅈ': 'w', 'ㅉ': 'w', 'ㅁ': 'a', 'ㄴ': 's', 'ㅇ': 'd' };
+    const moveKey = (e: KeyboardEvent) => KEY_BY_CODE[e.code] ?? KEY_BY_HANGUL[e.key] ?? null;
+    const typing = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      return !!t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable);
     };
-    const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (typing(e)) return;
+      const k = moveKey(e);
+      if (k) { keys.add(k); e.preventDefault(); return; }
+      // Space: walk to the nearest free seat in the pews (or stand up again).
+      if (e.code === 'Space' && !e.repeat && inWorld && !confessing) {
+        e.preventDefault();
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        act('seat');
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => { const k = moveKey(e); if (k) keys.delete(k); };
     const onBlur = () => { keys.clear(); joyX = joyY = 0; };
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType !== 'touch' && e.button !== 0) return;
@@ -930,7 +944,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady }: Pro
           : null}
         <button type="button" onClick={() => act('bow')}>목례</button>
         <button type="button" onClick={() => act('greet')}>인사</button>
-        <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 {state.sitting ? '일어나기' : '앉기'}</button>
+        <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 {state.sitting ? '일어나기' : '앉기'} <kbd>Space</kbd></button>
         <button type="button" onClick={() => act('candle')}>🕯 초 봉헌</button>
         <button type="button" onClick={() => act('confess')}>고해소</button>
         <button type="button" onClick={() => act('mary')}>🌹 성모님께</button>
