@@ -12,7 +12,6 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
   const gestureAt = useRef(0);
   const [nearFont, setNearFont] = useState(false);
   const [step, setStep] = useState<'water' | 'cross' | 'done'>('water');
-  const [pointerLocked, setPointerLocked] = useState(false);
   const [nearMary, setNearMary] = useState(false);
   const [actionNotice, setActionNotice] = useState('클릭한 바닥으로 이동하거나 하단 동작을 선택하세요.');
   const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
@@ -418,9 +417,9 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     // Congregation seating and central aisle.
     for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
       for (const x of [-4.25, 4.25]) {
-        addBox(world, 3.55, 0.22, 0.58, wood, x, 0.82, z, true);
-        addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42, true);
-        for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z, true);
+        addBox(world, 3.55, 0.22, 0.58, wood, x, 0.82, z);
+        addBox(world, 3.55, 0.9, 0.2, wood, x, 1.22, z + 0.42);
+        for (const dx of [-1.5, 1.5]) addBox(world, 0.16, 0.8, 0.22, trim, x + dx, 0.4, z);
       }
     }
 
@@ -717,64 +716,139 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       for (const x of [-8.7, -5.8, 5.8, 8.7]) addBlocker(x, z, 0.35, 0.35);
     }
 
+
     const keys = new Set<string>();
-    let yaw = 0;
-    let pitch = 0.12;
-    let cameraDistance = 6.8;
-    let dragging = false;
-    let mobileLooking = false;
-    let lastX = 0;
-    let lastY = 0;
-    let pinchDistance = 0;
-    let frame = 0;
-    let lastNearFont = false;
+    let yaw = 0, pitch = 0.12, cameraDistance = 6.8;
+    let pointerDown = false, pointerMoved = false, pointerTouch = false;
+    let lastX = 0, lastY = 0, downX = 0, downY = 0;
+    let pinchDistance = 0, joystickX = 0, joystickY = 0;
+    let movementTarget: THREE.Vector3 | null = null;
+    let pendingSeat: number | null = null, currentSeat: number | null = null;
+    let pendingAction: 'prayer' | null = null;
+    let isSitting = false, frame = 0;
+    let lastNearFont = false, lastNearMary = false;
     const clock = new THREE.Clock();
     const cameraTarget = new THREE.Vector3();
     const lookTarget = new THREE.Vector3();
+    const raycaster = new THREE.Raycaster();
+    const walkPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const worldBounds = { minX: -19.5, maxX: 19.5, minZ: -22.5, maxZ: 66 };
 
+    const standUp = () => {
+      if (currentSeat !== null) occupiedSeats.delete(currentSeat);
+      currentSeat = null;
+      isSitting = false;
+      avatar.position.y = 0;
+      if (gesture.current === 'sit') gesture.current = 'idle';
+      leftLeg.rotation.x = 0;
+      rightLeg.rotation.x = 0;
+      rosary.visible = false;
+    };
+    const setWalkTarget = (clientX: number, clientY: number) => {
+      if (isSitting) standUp();
+      const rect = host.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+        -(((clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1));
+      raycaster.setFromCamera(ndc, camera);
+      const point = raycaster.ray.intersectPlane(walkPlane, new THREE.Vector3());
+      if (!point) return;
+      movementTarget = new THREE.Vector3(
+        THREE.MathUtils.clamp(point.x, worldBounds.minX, worldBounds.maxX), 0,
+        THREE.MathUtils.clamp(point.z, worldBounds.minZ, worldBounds.maxZ));
+      pendingSeat = null;
+      pendingAction = null;
+      gesture.current = 'idle';
+      rosary.visible = false;
+      setActionNotice('목표 지점으로 이동합니다.');
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) {
         keys.add(key);
-        if (key.startsWith('arrow')) event.preventDefault();
+        event.preventDefault();
       }
     };
     const onKeyUp = (event: KeyboardEvent) => keys.delete(event.key.toLowerCase());
-    const onBlur = () => keys.clear();
-
-    const onMouseMove = (event: MouseEvent) => {
-      if (document.pointerLockElement === host) {
-        yaw += event.movementX * 0.0023;
-        pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.0018, -0.28, 0.48);
-      } else if (dragging) {
-        yaw += (event.clientX - lastX) * 0.004;
-        pitch = THREE.MathUtils.clamp(pitch - (event.clientY - lastY) * 0.003, -0.28, 0.48);
-        lastX = event.clientX;
-        lastY = event.clientY;
-      }
-    };
+    const onBlur = () => { keys.clear(); joystickX = 0; joystickY = 0; };
     const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType === 'touch') {
-        const bounds = host.getBoundingClientRect();
-        mobileLooking = event.clientX > bounds.left + bounds.width * 0.42;
-        lastX = event.clientX;
-        lastY = event.clientY;
-      } else if (event.button === 0) {
-        dragging = true;
-        lastX = event.clientX;
-        lastY = event.clientY;
-      }
+      if (event.pointerType !== 'touch' && event.button !== 0) return;
+      pointerDown = true;
+      pointerMoved = false;
+      pointerTouch = event.pointerType === 'touch';
+      downX = lastX = event.clientX;
+      downY = lastY = event.clientY;
     };
     const onPointerMove = (event: PointerEvent) => {
-      if (!mobileLooking || event.pointerType !== 'touch') return;
-      yaw += (event.clientX - lastX) * 0.006;
-      pitch = THREE.MathUtils.clamp(pitch - (event.clientY - lastY) * 0.004, -0.28, 0.48);
-      lastX = event.clientX;
-      lastY = event.clientY;
+      if (!pointerDown) return;
+      const dx = event.clientX - lastX, dy = event.clientY - lastY;
+      if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) pointerMoved = true;
+      if (pointerMoved) {
+        yaw += dx * (pointerTouch ? 0.006 : 0.004);
+        pitch = THREE.MathUtils.clamp(pitch - dy * (pointerTouch ? 0.0045 : 0.003), -0.28, 0.58);
+      }
+      lastX = event.clientX; lastY = event.clientY;
     };
-    const onPointerUp = () => {
-      dragging = false;
-      mobileLooking = false;
+    const onPointerUp = (event: PointerEvent) => {
+      if (!pointerDown) return;
+      if (!pointerMoved) setWalkTarget(event.clientX, event.clientY);
+      pointerDown = false; pointerMoved = false; pointerTouch = false;
+    };
+    const onJoystick = (event: Event) => {
+      const detail = (event as CustomEvent<{x:number;y:number}>).detail;
+      joystickX = THREE.MathUtils.clamp(detail?.x ?? 0, -1, 1);
+      joystickY = THREE.MathUtils.clamp(detail?.y ?? 0, -1, 1);
+      if (Math.abs(joystickX) + Math.abs(joystickY) > 0.08) {
+        if (isSitting) standUp();
+        movementTarget = null; pendingSeat = null; pendingAction = null;
+      }
+    };
+    const onWorldAction = (event: Event) => {
+      const action = (event as CustomEvent<string>).detail;
+      if (action === 'seat') {
+        if (isSitting) { standUp(); setActionNotice('자리에서 일어났습니다.'); return; }
+        const free = seatSpots.map((position,index)=>({position,index,distance:Math.hypot(avatar.position.x-position.x,avatar.position.z-position.z)}))
+          .filter(item=>!occupiedSeats.has(item.index)).sort((a,b)=>a.distance-b.distance);
+        if (!free.length) { setActionNotice('비어 있는 자리가 없습니다.'); return; }
+        pendingSeat = free[0].index;
+        pendingAction = null;
+        movementTarget = free[0].position.clone();
+        gesture.current = 'idle'; rosary.visible = false;
+        setActionNotice('가장 가까운 빈자리를 찾아 이동합니다.');
+        return;
+      }
+      if (action === 'mary') {
+        if (isSitting) standUp();
+        pendingSeat = null; pendingAction = 'prayer';
+        movementTarget = new THREE.Vector3(13.15,0,49.5);
+        gesture.current = 'idle'; rosary.visible = false;
+        setActionNotice('정원에 있는 성모 마리아 기도처로 이동합니다.');
+        return;
+      }
+      if (action === 'rosary') {
+        if (gesture.current === 'rosary') {
+          gesture.current = 'idle'; rosary.visible = false;
+          setActionNotice('묵주기도를 마쳤습니다.');
+        } else {
+          if (isSitting) standUp();
+          movementTarget = null; pendingSeat = null; pendingAction = null;
+          gesture.current = 'rosary'; gestureAt.current = performance.now();
+          rosary.visible = true;
+          setActionNotice('묵주를 손에 들고 기도합니다. 다시 누르면 마칩니다.');
+        }
+        return;
+      }
+      if (isSitting) standUp();
+      movementTarget = null; pendingSeat = null; pendingAction = null;
+      rosary.visible = false;
+      if (['cross','prayer','bow','greet'].includes(action)) {
+        gesture.current = action as 'cross'|'prayer'|'bow'|'greet';
+        gestureAt.current = performance.now();
+        const messages: Record<string,string> = {
+          cross:'성호경을 긋습니다.', prayer:'두 손을 모아 기도합니다.',
+          bow:'정중하게 목례합니다.', greet:'손을 들어 인사합니다.'
+        };
+        setActionNotice(messages[action]);
+      }
     };
     const onTouchStart = (event: TouchEvent) => {
       if (event.touches.length === 2) {
@@ -805,23 +879,15 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
       camera.updateProjectionMatrix();
       renderer.setSize(host.clientWidth, host.clientHeight);
     };
-    const onHostClick = () => {
-      if (window.matchMedia('(pointer: fine)').matches && document.pointerLockElement !== host) {
-        void host.requestPointerLock?.();
-      }
-    };
-    const onPointerLockChange = () => setPointerLocked(document.pointerLockElement === host);
-
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
-    window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('resize', onResize);
-    document.addEventListener('pointerlockchange', onPointerLockChange);
+    window.addEventListener('religion:joystick', onJoystick as EventListener);
+    window.addEventListener('religion:action', onWorldAction as EventListener);
     host.addEventListener('pointerdown', onPointerDown);
     host.addEventListener('pointermove', onPointerMove);
-    host.addEventListener('click', onHostClick);
     host.addEventListener('touchstart', onTouchStart, { passive: true });
     host.addEventListener('touchmove', onTouchMove, { passive: false });
     host.addEventListener('touchend', onTouchEnd);
@@ -830,136 +896,97 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const animate = () => {
       frame = requestAnimationFrame(animate);
       const delta = Math.min(clock.getDelta(), 0.04);
+
       const keyboardForward = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
       const keyboardSideways = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
       const forward = keyboardForward - joystickY;
       const sideways = keyboardSideways + joystickX;
       const manualMoving = Math.abs(forward) + Math.abs(sideways) > 0.08;
-      const oldX = avatar.position.x;
-      const oldZ = avatar.position.z;
-      let moveX = 0;
-      let moveZ = 0;
-      let moving = false;
-
+      const oldX = avatar.position.x, oldZ = avatar.position.z;
+      let moveX = 0, moveZ = 0, moving = false;
       if (manualMoving) {
-        if (movementTarget || pendingSeat !== null || pendingAction) {
-          movementTarget = null;
-          pendingSeat = null;
-          pendingAction = null;
-        }
+        movementTarget = null; pendingSeat = null; pendingAction = null;
         if (isSitting) standUp();
         const length = Math.hypot(forward, sideways) || 1;
-        const f = forward / length;
-        const side = sideways / length;
+        const f = forward / length, side = sideways / length;
         moveX = Math.sin(yaw) * f + Math.cos(yaw) * side;
         moveZ = -Math.cos(yaw) * f + Math.sin(yaw) * side;
         moving = true;
       } else if (movementTarget && !isSitting) {
-        const diffX = movementTarget.x - oldX;
-        const diffZ = movementTarget.z - oldZ;
-        const distance = Math.hypot(diffX, diffZ);
+        const diffX = movementTarget.x - oldX, diffZ = movementTarget.z - oldZ;
+        const distance = Math.hypot(diffX,diffZ);
         if (distance > 0.34) {
-          moveX = diffX / distance;
-          moveZ = diffZ / distance;
-          moving = true;
+          moveX = diffX / distance; moveZ = diffZ / distance; moving = true;
         } else {
           movementTarget = null;
           if (pendingSeat !== null) {
-            const seatIndex = pendingSeat;
-            const seat = seatSpots[seatIndex];
-            occupiedSeats.add(seatIndex);
-            currentSeat = seatIndex;
-            pendingSeat = null;
-            avatar.position.set(seat.x, 0.18, seat.z + 0.66);
-            avatar.rotation.y = 0;
-            isSitting = true;
-            gesture.current = 'sit';
-            gestureAt.current = performance.now();
-            setActionNotice('빈자리에 앉았습니다. 이동하면 다시 일어납니다.');
+            const index = pendingSeat, seat = seatSpots[index];
+            occupiedSeats.add(index); currentSeat = index; pendingSeat = null;
+            avatar.position.set(seat.x,0.2,seat.z+0.2);
+            avatar.rotation.y = 0; isSitting = true;
+            gesture.current = 'sit'; gestureAt.current = performance.now();
+            setActionNotice('비어 있던 자리에 앉았습니다. 이동하면 다시 일어납니다.');
           } else if (pendingAction === 'prayer') {
-            pendingAction = null;
-            avatar.rotation.y = Math.PI / 2;
-            gesture.current = 'prayer';
-            gestureAt.current = performance.now();
+            pendingAction = null; avatar.rotation.y = -Math.PI/2;
+            gesture.current = 'prayer'; gestureAt.current = performance.now();
             setActionNotice('성모님 앞에서 두 손을 모아 기도합니다.');
           }
         }
       }
-
       if (moving) {
-        const nextX = THREE.MathUtils.clamp(oldX + moveX * delta * 4.3, worldBounds.minX, worldBounds.maxX);
-        const nextZ = THREE.MathUtils.clamp(oldZ + moveZ * delta * 4.3, worldBounds.minZ, worldBounds.maxZ);
-        if (!collides(nextX, oldZ)) avatar.position.x = nextX;
-        if (!collides(avatar.position.x, nextZ)) avatar.position.z = nextZ;
-        avatar.rotation.y = Math.atan2(moveX, -moveZ);
+        const nx = THREE.MathUtils.clamp(oldX + moveX*delta*4.3,worldBounds.minX,worldBounds.maxX);
+        const nz = THREE.MathUtils.clamp(oldZ + moveZ*delta*4.3,worldBounds.minZ,worldBounds.maxZ);
+        if (!collides(nx,oldZ)) avatar.position.x = nx;
+        if (!collides(avatar.position.x,nz)) avatar.position.z = nz;
+        avatar.rotation.y = Math.atan2(moveX,-moveZ);
       }
 
-      const gait = moving ? Math.sin(clock.elapsedTime * 11.5) * 0.5 : 0;
+      const gait = moving ? Math.sin(clock.elapsedTime*11.5)*0.5 : 0;
       if (gesture.current !== 'sit') {
-        leftLeg.rotation.x = gait;
-        rightLeg.rotation.x = -gait;
+        leftLeg.rotation.x = gait; rightLeg.rotation.x = -gait;
       }
-      leftArm.rotation.x = -gait * 0.42;
-      rightArm.rotation.x = gait * 0.42;
-      leftArm.rotation.z = 0;
-      rightArm.rotation.z = 0;
-      head.rotation.x = 0;
+      leftArm.rotation.x = -gait*0.42; rightArm.rotation.x = gait*0.42;
+      leftArm.rotation.z = 0; rightArm.rotation.z = 0; head.rotation.x = 0;
 
-      if (gesture.current !== 'idle') {
-        if (gesture.current === 'sit') {
-          avatar.position.y = 0.18;
-          leftLeg.rotation.x = -0.95;
-          rightLeg.rotation.x = -0.95;
-          leftArm.rotation.x = -0.18;
-          rightArm.rotation.x = -0.18;
-          head.rotation.x = 0.08;
-        } else if (gesture.current === 'rosary') {
-          leftArm.rotation.x = -0.92;
-          rightArm.rotation.x = -0.92;
-          leftArm.rotation.z = 0.18;
-          rightArm.rotation.z = -0.18;
-          head.rotation.x = 0.12;
-          rosary.visible = true;
-          rosary.rotation.z = Math.sin(clock.elapsedTime * 1.4) * 0.035;
-          rosaryBeadMaterial.emissiveIntensity = 0.12 + Math.sin(clock.elapsedTime * 2.2) * 0.05;
-        } else {
-          const duration = gesture.current === 'dip' ? 950 : gesture.current === 'cross' ? 1350 : gesture.current === 'prayer' ? 2300 : gesture.current === 'bow' ? 1100 : 1550;
-          const progress = Math.min(1, (performance.now() - gestureAt.current) / duration);
-          const pulse = Math.sin(progress * Math.PI);
-          if (gesture.current === 'dip') {
-            leftArm.rotation.x = -1.2 * pulse;
-            leftArm.rotation.z = 0.58 * pulse;
-            head.rotation.x = 0.08 * pulse;
-          } else if (gesture.current === 'cross') {
-            leftArm.rotation.x = -0.95 * pulse - 0.18;
-            rightArm.rotation.x = -0.95 * pulse - 0.18;
-            leftArm.rotation.z = 0.38 * pulse;
-            rightArm.rotation.z = -0.38 * pulse;
-          } else if (gesture.current === 'prayer') {
-            leftArm.rotation.x = -0.86 * pulse - 0.22;
-            rightArm.rotation.x = -0.86 * pulse - 0.22;
-            leftArm.rotation.z = 0.2 * pulse;
-            rightArm.rotation.z = -0.2 * pulse;
-            head.rotation.x = 0.22 * pulse;
-          } else if (gesture.current === 'bow') {
-            head.rotation.x = 0.42 * pulse;
-            avatar.position.y = -0.035 * pulse;
-            leftArm.rotation.x = -0.12 * pulse;
-            rightArm.rotation.x = -0.12 * pulse;
-          } else if (gesture.current === 'greet') {
-            rightArm.rotation.x = -1.0 * pulse;
-            rightArm.rotation.z = -0.4 * pulse + Math.sin(progress * Math.PI * 8) * 0.15 * pulse;
-            leftArm.rotation.x = -0.08 * pulse;
-          }
-          if (progress >= 1) {
-            gesture.current = 'idle';
-            avatar.position.y = 0;
-            rosary.visible = false;
-          }
+      if (gesture.current === 'sit') {
+        avatar.position.y = 0.2;
+        leftLeg.rotation.x = -0.95; rightLeg.rotation.x = -0.95;
+        leftArm.rotation.x = -0.18; rightArm.rotation.x = -0.18;
+        head.rotation.x = 0.08;
+      } else if (gesture.current === 'rosary') {
+        leftArm.rotation.x = -0.92; rightArm.rotation.x = -0.92;
+        leftArm.rotation.z = 0.18; rightArm.rotation.z = -0.18;
+        head.rotation.x = 0.12; rosary.visible = true;
+        rosary.rotation.z = Math.sin(clock.elapsedTime*1.4)*0.035;
+        rosaryBeadMaterial.emissiveIntensity = 0.12 + Math.sin(clock.elapsedTime*2.2)*0.05;
+      } else if (gesture.current !== 'idle') {
+        const duration = gesture.current === 'dip' ? 950 : gesture.current === 'cross' ? 1350 :
+          gesture.current === 'prayer' ? 2300 : gesture.current === 'bow' ? 1100 : 1550;
+        const progress = Math.min(1,(performance.now()-gestureAt.current)/duration);
+        const pulse = Math.sin(progress*Math.PI);
+        if (gesture.current === 'dip') {
+          leftArm.rotation.x = -1.2*pulse; leftArm.rotation.z = 0.58*pulse;
+          head.rotation.x = 0.08*pulse;
+        } else if (gesture.current === 'cross') {
+          leftArm.rotation.x = -0.95*pulse-0.18; rightArm.rotation.x = -0.95*pulse-0.18;
+          leftArm.rotation.z = 0.38*pulse; rightArm.rotation.z = -0.38*pulse;
+        } else if (gesture.current === 'prayer') {
+          leftArm.rotation.x = -0.86*pulse-0.22; rightArm.rotation.x = -0.86*pulse-0.22;
+          leftArm.rotation.z = 0.2*pulse; rightArm.rotation.z = -0.2*pulse;
+          head.rotation.x = 0.22*pulse;
+        } else if (gesture.current === 'bow') {
+          head.rotation.x = 0.42*pulse; avatar.position.y = -0.035*pulse;
+          leftArm.rotation.x = -0.12*pulse; rightArm.rotation.x = -0.12*pulse;
+        } else if (gesture.current === 'greet') {
+          rightArm.rotation.x = -1.0*pulse;
+          rightArm.rotation.z = -0.4*pulse + Math.sin(progress*Math.PI*8)*0.15*pulse;
+          leftArm.rotation.x = -0.08*pulse;
         }
-      } else {
-        avatar.position.y = 0;
-        rosary.visible = false;
+        if (progress >= 1) {
+          gesture.current = 'idle'; avatar.position.y = 0; rosary.visible = false;
+        }
+      } else if (!isSitting) {
+        avatar.position.y = 0; rosary.visible = false;
       }
 
       const followHeight = 2.15 + pitch * 2.6;
@@ -978,6 +1005,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
         lastNearFont = near;
         setNearFont(near);
       }
+      const maryDistance = Math.hypot(avatar.position.x - 13.15, avatar.position.z - 49.5);
+      const nearShrine = maryDistance < 4.2;
+      if (nearShrine !== lastNearMary) {
+        lastNearMary = nearShrine;
+        setNearMary(nearShrine);
+      }
       const maryDistance = Math.hypot(avatar.position.x - 13.2, avatar.position.z - 49.5);
       const nearShrine = maryDistance < 4.2;
       if (nearShrine !== lastNearMary) {
@@ -995,17 +1028,15 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     return () => {
       cancelAnimationFrame(frame);
-      if (document.pointerLockElement === host) document.exitPointerLock();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
-      window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('resize', onResize);
-      document.removeEventListener('pointerlockchange', onPointerLockChange);
+      window.removeEventListener('religion:joystick', onJoystick as EventListener);
+      window.removeEventListener('religion:action', onWorldAction as EventListener);
       host.removeEventListener('pointerdown', onPointerDown);
       host.removeEventListener('pointermove', onPointerMove);
-      host.removeEventListener('click', onHostClick);
       host.removeEventListener('touchstart', onTouchStart);
       host.removeEventListener('touchmove', onTouchMove);
       host.removeEventListener('touchend', onTouchEnd);
@@ -1034,8 +1065,25 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     gestureAt.current = performance.now();
     setStep('done');
   };
-  const dispatchKey = (key: string, type: 'keydown' | 'keyup') =>
-    window.dispatchEvent(new KeyboardEvent(type, { key }));
+  const dispatchWorldAction = (action: string) =>
+    window.dispatchEvent(new CustomEvent('religion:action', { detail: action }));
+  const dispatchJoystick = (x: number, y: number) =>
+    window.dispatchEvent(new CustomEvent('religion:joystick', { detail: { x, y } }));
+  const updateJoystick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const radius = rect.width * 0.33;
+    let x = (event.clientX - (rect.left + rect.width/2)) / radius;
+    let y = (event.clientY - (rect.top + rect.height/2)) / radius;
+    const length = Math.hypot(x,y);
+    if (length > 1) { x /= length; y /= length; }
+    setJoystickOffset({ x:x*radius, y:y*radius });
+    dispatchJoystick(x,y);
+  };
+  const stopJoystick = (event?: ReactPointerEvent<HTMLDivElement>) => {
+    if (event) event.preventDefault();
+    setJoystickOffset({x:0,y:0});
+    dispatchJoystick(0,0);
+  };
 
   return (
     <div className="immersive-avatar-stage">
@@ -1049,16 +1097,31 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           <button type="button" className="holy-water-skip" onClick={() => setStep('done')}>건너뛰기</button>
         </div>
       ) : null}
-      {!pointerLocked ? <div className="fps-control-hint">클릭 후 WASD · 마우스 시점 · 휠 줌</div> : null}
-      <div className="touch-pad avatar-touch-pad" aria-label="이동 조작">
-        <button type="button" aria-label="앞으로" onPointerDown={event => { event.preventDefault(); dispatchKey('w', 'keydown'); }} onPointerUp={() => dispatchKey('w', 'keyup')} onPointerLeave={() => dispatchKey('w', 'keyup')} onPointerCancel={() => dispatchKey('w', 'keyup')}>▲</button>
-        <div>
-          <button type="button" aria-label="왼쪽" onPointerDown={event => { event.preventDefault(); dispatchKey('a', 'keydown'); }} onPointerUp={() => dispatchKey('a', 'keyup')} onPointerLeave={() => dispatchKey('a', 'keyup')} onPointerCancel={() => dispatchKey('a', 'keyup')}>◀</button>
-          <button type="button" aria-label="뒤로" onPointerDown={event => { event.preventDefault(); dispatchKey('s', 'keydown'); }} onPointerUp={() => dispatchKey('s', 'keyup')} onPointerLeave={() => dispatchKey('s', 'keyup')} onPointerCancel={() => dispatchKey('s', 'keyup')}>▼</button>
-          <button type="button" aria-label="오른쪽" onPointerDown={event => { event.preventDefault(); dispatchKey('d', 'keydown'); }} onPointerUp={() => dispatchKey('d', 'keyup')} onPointerLeave={() => dispatchKey('d', 'keyup')} onPointerCancel={() => dispatchKey('d', 'keyup')}>▶</button>
-        </div>
+
+      <div className="world-action-notice" role="status">
+        {actionNotice}{nearMary ? ' · 성모님 기도처 근처' : ''}
       </div>
-      <div className="camera-touch-hint" aria-hidden="true">화면 오른쪽 드래그 · 두 손가락 줌</div>
+      <div className="world-action-bar" role="group" aria-label="주요 행동">
+        <button type="button" onClick={() => dispatchWorldAction('cross')}>✝ 성호경</button>
+        <button type="button" onClick={() => dispatchWorldAction('prayer')}>🙏 기도</button>
+        <button type="button" onClick={() => dispatchWorldAction('bow')}>목례</button>
+        <button type="button" onClick={() => dispatchWorldAction('greet')}>인사</button>
+        <button type="button" onClick={() => dispatchWorldAction('seat')}>자리 앉기</button>
+        <button type="button" onClick={() => dispatchWorldAction('rosary')}>📿 묵주기도</button>
+        <button type="button" onClick={() => dispatchWorldAction('mary')}>{nearMary ? '성모님께 기도' : '성모님 기도처'}</button>
+      </div>
+      <div className="mobile-joystick" role="application" aria-label="모바일 이동 조이스틱"
+        onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); updateJoystick(event); }}
+        onPointerMove={event => { if (event.buttons > 0 || event.pressure > 0) updateJoystick(event); }}
+        onPointerUp={stopJoystick} onPointerCancel={stopJoystick} onLostPointerCapture={stopJoystick}>
+        <span className="mobile-joystick-direction mobile-joystick-up">▲</span>
+        <span className="mobile-joystick-direction mobile-joystick-down">▼</span>
+        <span className="mobile-joystick-direction mobile-joystick-left">◀</span>
+        <span className="mobile-joystick-direction mobile-joystick-right">▶</span>
+        <span className="mobile-joystick-knob" style={{transform:`translate(${joystickOffset.x}px, ${joystickOffset.y}px)`}} />
+      </div>
+      <div className="camera-touch-hint" aria-hidden="true">화면 드래그로 시점 변경 · 두 손가락 줌</div>
+      <div className="world-asset-credit">석재 PBR: Poly Haven CC0 · 성당/성모님 사진: Wikimedia Commons</div>
     </div>
   );
 }
