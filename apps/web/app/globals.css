@@ -292,3 +292,6 @@
   .camera-touch-hint{display:none!important}
   .holy-water-actions{bottom:176px!important;max-width:calc(100vw - 20px)}
 }
+
+.world-asset-credit a{color:#f0dfbd;text-decoration:underline;text-underline-offset:2px}
+.world-asset-credit a:hover{color:#fff2d5}
