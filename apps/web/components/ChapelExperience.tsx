@@ -7,7 +7,7 @@ type Intention = { id: string; text: string; createdAt: string };
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
-const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL;
+const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || 'https://upload.wikimedia.org/wikipedia/commons/9/96/Veni.sancte.spiritus.ogg';
 const supabase: SupabaseClient | null = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export default function ChapelExperience() {
@@ -62,6 +62,7 @@ export default function ChapelExperience() {
     const text = intention.trim();
     if (text.length < 3) { setNotice('기도 지향을 세 글자 이상 입력해 주세요.'); return; }
     setLoading(true); setNotice('');
+    let saved = false;
     if (supabase && parishId) {
       let { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -72,17 +73,19 @@ export default function ChapelExperience() {
       const { error } = await supabase.from('prayer_intentions').insert({ parish_id: parishId, author_id: session.user.id, intention: text, is_public: isPublic, candle_lit: true });
       if (error) setNotice('봉헌을 저장하지 못했어요. 본당 ID와 Supabase 정책 설정을 확인해 주세요.');
       else if (isPublic) {
+        saved = true;
         const { data } = await supabase.from('prayer_intentions').select('id, intention, created_at')
           .eq('parish_id', parishId).eq('is_public', true).order('created_at', { ascending: false }).limit(20);
         setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at })));
         const { count } = await supabase.from('prayer_intentions').select('id', { count: 'exact', head: true }).eq('parish_id', parishId).eq('is_public', true).gt('expires_at', new Date().toISOString());
         if (count !== null) setCandleCount(count);
-      } else setNotice('기도 지향을 비공개로 봉헌했어요.');
+      } else { saved = true; setNotice('기도 지향을 비공개로 봉헌했어요.'); }
     } else {
-      if (isPublic) { setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]); setCandleCount(count => count + 1); }
-      else setNotice('기도 지향을 이 브라우저에서 비공개로 봉헌했어요. (데모 모드)');
+      if (isPublic) { setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]); setCandleCount(count => count + 1); saved = true; }
+      else { setNotice('기도 지향을 이 브라우저에서 비공개로 봉헌했어요. (데모 모드)'); saved = true; }
     }
-    setIntention(''); setLoading(false);
+    if (saved) setIntention('');
+    setLoading(false);
   };
 
   const toggleAudio = async () => {
@@ -115,9 +118,9 @@ export default function ChapelExperience() {
           <p className="micro-copy">잠시 침묵한 뒤, 마음에 담긴 기도 지향을 봉헌해 보세요.</p>
         </section>
         <section className="panel chant-panel">
-          <div className="section-kicker">03 / GREGORIAN CHANT</div><div className="chant-layout"><div><h2>고요히 흐르는 성가</h2><p className="section-intro">그레고리오 성가와 함께 기도의 시간을 가져보세요.</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>Gregorian Chant</strong><small>{audioUrl ? '기도를 위한 배경 성가' : '음원 연결 대기 중'}</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
-          {audioUrl && <audio ref={audioRef} src={audioUrl} loop onEnded={()=>setIsPlaying(false)} onPause={()=>setIsPlaying(false)} onPlay={()=>setIsPlaying(true)} />}
-          <div className="chant-footnote">음원은 배포·공연·온라인 스트리밍 권한이 확인된 녹음 파일을 사용합니다.</div>
+          <div className="section-kicker">03 / GREGORIAN CHANT</div><div className="chant-layout"><div><h2>고요히 흐르는 성가</h2><p className="section-intro">그레고리오 성가와 함께 기도의 시간을 가져보세요.</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>Veni Sancte Spiritus</strong><small>그레고리오 성가 · 성령 송가</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
+          {audioUrl && <audio ref={audioRef} src={audioUrl} loop preload="none" onEnded={()=>setIsPlaying(false)} onPause={()=>setIsPlaying(false)} onPlay={()=>setIsPlaying(true)} />}
+          <div className="chant-footnote">음원: Membeth · Wikimedia Commons · Public Domain. <a href="https://commons.wikimedia.org/wiki/File:Veni.sancte.spiritus.ogg" target="_blank" rel="noreferrer">원본 및 이용 정보</a></div>
         </section>
       </div>
       <footer className="footer"><span>RELIGION © 2026</span><span>가상 기도 공간은 실제 미사와 성사를 대체하지 않습니다.</span></footer>
