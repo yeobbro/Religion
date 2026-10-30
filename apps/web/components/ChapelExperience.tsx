@@ -233,7 +233,6 @@ export default function ChapelExperience() {
         <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene displayName={baptismalName.trim()} /></section>
         <audio
           ref={audioRef}
-          src={immersiveAudioMode === 'ambient' ? ambientMusicUrl : audioUrl}
           loop
           preload="none"
           onEnded={() => setIsPlaying(false)}
