@@ -98,6 +98,6 @@ export function allocateRoom(
  * The count-only fallback is deterministic, but a real room must pass actual
  * reserved seat slots to avoid two simultaneous joins receiving one seat.
  */
-export function findNextSeat(occupiedCount: number, capacity = SPACE_CAPACITY.chapel.maxVisitors): number {
+export function findNextSeat(occupiedCount: number, capacity: number = SPACE_CAPACITY.chapel.maxVisitors): number {
   return occupiedCount >= capacity ? -1 : Math.max(1, Math.floor(occupiedCount) + 1);
 }
