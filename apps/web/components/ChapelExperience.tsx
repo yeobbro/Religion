@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Intention = { id: string; text: string; createdAt: string };
@@ -14,25 +14,11 @@ export default function ChapelExperience() {
   const [intention, setIntention] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [intentions, setIntentions] = useState<Intention[]>([]);
-  const [decades, setDecades] = useState(0);
-  const [todayDecades, setTodayDecades] = useState(0);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.35);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const isConnected = Boolean(supabase && parishId);
-
-  const loadCommunityCount = useCallback(async () => {
-    if (!supabase || !parishId) return;
-    const { data, error } = await supabase.from('rosary_contributions').select('decades, created_at').eq('parish_id', parishId);
-    if (error) { setNotice('공동 묵주 기록을 불러오지 못했어요. Supabase 설정을 확인해 주세요.'); return; }
-    const rows = data ?? [];
-    setDecades(rows.reduce((sum, row) => sum + Number(row.decades), 0));
-    const today = new Date().toLocaleDateString('en-CA');
-    setTodayDecades(rows.filter(row => new Date(row.created_at).toLocaleDateString('en-CA') === today).reduce((sum, row) => sum + Number(row.decades), 0));
-  }, []);
-
   useEffect(() => {
     if (!supabase) return;
     void (async () => {
@@ -43,21 +29,30 @@ export default function ChapelExperience() {
 
   useEffect(() => {
     if (!supabase || !parishId) return;
-    void loadCommunityCount();
-    void supabase.from('prayer_intentions').select('id, intention, created_at').eq('parish_id', parishId).eq('is_public', true).order('created_at', { ascending: false }).limit(20)
-      .then(({ data }) => setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at }))));
-    const channel = supabase.channel('parish-rosary-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rosary_contributions', filter: `parish_id=eq.${parishId}` }, () => void loadCommunityCount())
-      .subscribe();
+    const loadIntentions = async () => {
+      const { data, error } = await supabase.from('prayer_intentions')
+        .select('id, intention, created_at')
+        .eq('parish_id', parishId).eq('is_public', true)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false }).limit(20);
+      if (!error) setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at })));
+    };
+    void loadIntentions();
+    const channel = supabase.channel('public-prayer-intentions')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'prayer_intentions', filter: `parish_id=eq.${parishId}` }, payload => {
+        const row = payload.new as { id: string; intention: string; created_at: string; is_public: boolean; expires_at: string };
+        if (row.is_public && row.expires_at > new Date().toISOString()) {
+          setIntentions(items => [{ id: row.id, text: row.intention, createdAt: row.created_at }, ...items.filter(item => item.id !== row.id)].slice(0, 20));
+        }
+      }).subscribe();
     return () => { void supabase?.removeChannel(channel); };
-  }, [loadCommunityCount]);
+  }, []);
 
   useEffect(() => {
     if (!audioRef.current) return;
     audioRef.current.volume = volume;
   }, [volume]);
 
-  const progress = Math.min(100, Math.round((decades / 1000) * 100));
   const candleCount = intentions.length;
 
   const addIntention = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -68,6 +63,11 @@ export default function ChapelExperience() {
     if (supabase && parishId) {
       const { error } = await supabase.from('prayer_intentions').insert({ parish_id: parishId, author_id: (await supabase.auth.getUser()).data.user?.id, intention: text, is_public: isPublic, candle_lit: true });
       if (error) setNotice('봉헌을 저장하지 못했어요. 로그인 및 Supabase 정책 설정을 확인해 주세요.');
+      else if (isPublic) {
+        const { data } = await supabase.from('prayer_intentions').select('id, intention, created_at')
+          .eq('parish_id', parishId).eq('is_public', true).order('created_at', { ascending: false }).limit(20);
+        setIntentions((data ?? []).map(row => ({ id: row.id, text: row.intention, createdAt: row.created_at })));
+      } else setNotice('기도 지향을 비공개로 봉헌했어요.');
       else if (isPublic) setIntentions(items => [{ id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }, ...items]);
       else setNotice('기도 지향을 비공개로 봉헌했어요.');
     } else {
@@ -75,18 +75,6 @@ export default function ChapelExperience() {
       else setNotice('기도 지향을 이 브라우저에서 비공개로 봉헌했어요. (데모 모드)');
     }
     setIntention(''); setLoading(false);
-  };
-
-  const contributeRosary = async () => {
-    if (supabase && parishId) {
-      const { error } = await supabase.from('rosary_contributions').insert({ parish_id: parishId, user_id: (await supabase.auth.getUser()).data.user?.id, decades: 5 });
-      if (error) { setNotice('묵주 기록에 실패했어요. 로그인 상태와 본당 ID를 확인해 주세요.'); return; }
-      await loadCommunityCount();
-    } else {
-      setDecades(value => value + 5);
-      setTodayDecades(value => value + 5);
-    }
-    setNotice('묵주 5단을 본당 공동 기도에 보탰어요.');
   };
 
   const toggleAudio = async () => {
@@ -112,13 +100,11 @@ export default function ChapelExperience() {
           <div className="candle-summary"><div className="candle-icon">🕯</div><div><strong>{candleCount.toLocaleString()}개의 촛불</strong><span>이 공간에 공개된 기도 지향</span></div></div>
           {intentions.length > 0 && <div className="intention-list"><h3>함께 봉헌된 기도</h3>{intentions.slice(0,4).map(item => <article key={item.id} className="intention-item"><span>🕯</span><p>{item.text}</p></article>)}</div>}
         </section>
-        <section className="panel rosary-panel">
-          <div className="section-kicker">02 / COMMUNITY ROSARY</div><h2>우리 본당의 묵주기도</h2><p className="section-intro">각자의 기도가 모여 공동체의 큰 기도가 됩니다.</p>
-          <div className="rosary-stat"><span>함께 바친 묵주기도</span><strong>{decades.toLocaleString()}<small> 단</small></strong><span className="today-stat">오늘 +{todayDecades.toLocaleString()}단</span></div>
-          <div className="progress-track"><span style={{width: progress + '%'}} /></div><div className="progress-label"><span>본당 공동 목표</span><strong>{progress}% · 1,000단</strong></div>
-          <div className="rosary-art" aria-hidden="true"><div className="bead-loop">{Array.from({length:18},(_,i)=><i key={i} className={i%5===0?'large-bead':''} />)}</div><div className="rosary-cross">✝</div></div>
-          <button className="primary-button rosary-button" onClick={contributeRosary}>묵주 5단 봉헌하기 <span>＋</span></button>
-          <p className="micro-copy">{isConnected ? '본당 공동체와 실시간으로 동기화됩니다.' : '현재 데모 모드 · 이 브라우저에서만 숫자가 누적됩니다.'}</p>
+        <section className="panel prayer-guide-panel">
+          <div className="section-kicker">02 / A MOMENT OF PRAYER</div><h2>마음을 모으는 짧은 기도</h2><p className="section-intro">잠시 멈추고 마음을 가다듬으며, 오늘의 기도를 시작해 보세요.</p>
+          <div className="prayer-guide-visual"><span>✝</span><i></i></div>
+          <blockquote className="prayer-quote">“주님, 제 마음 안에 머무르시고<br/>오늘의 걸음을 평화로 이끌어 주소서.”</blockquote>
+          <p className="micro-copy">잠시 침묵한 뒤, 마음에 담긴 기도 지향을 봉헌해 보세요.</p>
         </section>
         <section className="panel chant-panel">
           <div className="section-kicker">03 / GREGORIAN CHANT</div><div className="chant-layout"><div><h2>고요히 흐르는 성가</h2><p className="section-intro">그레고리오 성가와 함께 기도의 시간을 가져보세요.</p><div className="track-title"><span className="sound-wave">♫</span><div><strong>Gregorian Chant</strong><small>{audioUrl ? '기도를 위한 배경 성가' : '음원 연결 대기 중'}</small></div></div></div><div className="audio-controls"><button className="play-button" onClick={toggleAudio} aria-label={isPlaying?'일시정지':'재생'}>{isPlaying?'Ⅱ':'▶'}</button><label className="volume-control">VOL <input type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div></div>
