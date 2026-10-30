@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import * as THREE from 'three';
 
 type Props = { displayName: string };
@@ -8,11 +8,14 @@ type Blocker = { x: number; z: number; rx: number; rz: number };
 
 export default function ImmersiveAvatarScene({ displayName }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const gesture = useRef<'idle' | 'dip' | 'cross'>('idle');
+  const gesture = useRef<'idle' | 'dip' | 'cross' | 'prayer' | 'bow' | 'greet' | 'rosary' | 'sit'>('idle');
   const gestureAt = useRef(0);
   const [nearFont, setNearFont] = useState(false);
   const [step, setStep] = useState<'water' | 'cross' | 'done'>('water');
   const [pointerLocked, setPointerLocked] = useState(false);
+  const [nearMary, setNearMary] = useState(false);
+  const [actionNotice, setActionNotice] = useState('클릭한 바닥으로 이동하거나 하단 동작을 선택하세요.');
+  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     setStep('water');
@@ -93,6 +96,24 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
 
     const makeMat = (color: string, roughness = 0.82, metalness = 0, map?: THREE.Texture) =>
       new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
+
+    // Photo-scanned PBR stone from Poly Haven (CC0) for the cathedral masonry.
+    const textureLoader = new THREE.TextureLoader();
+    const stoneColorMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_diff_2k.jpg');
+    const stoneNormalMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_nor_gl_2k.jpg');
+    const stoneRoughnessMap = textureLoader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_brick_wall_001/stone_brick_wall_001_rough_2k.jpg');
+    const loadedTextures: THREE.Texture[] = [stoneColorMap, stoneNormalMap, stoneRoughnessMap];
+    [stoneColorMap, stoneNormalMap, stoneRoughnessMap].forEach(texture => {
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(12, 7);
+    });
+    stoneColorMap.colorSpace = THREE.SRGBColorSpace;
+    const cathedralInteriorPhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Cathedral_Interior_with_Stained_Glass_and_Altar_%2855260745408%29.jpg/768px-Cathedral_Interior_with_Stained_Glass_and_Altar_%2855260745408%29.jpg');
+    const maryShrinePhoto = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/EstatuaGrutadeLourdes-MDP.jpg/768px-EstatuaGrutadeLourdes-MDP.jpg');
+    cathedralInteriorPhoto.colorSpace = THREE.SRGBColorSpace;
+    maryShrinePhoto.colorSpace = THREE.SRGBColorSpace;
+    loadedTextures.push(cathedralInteriorPhoto, maryShrinePhoto);
+
     const plaster = makeMat('#d7d0c0', 0.94, 0, makeNoiseTexture('#d7d0c0', 2, 4, 3));
     const darkPlaster = makeMat('#938d80', 0.94, 0, makeNoiseTexture('#938d80', 4, 3, 2));
     const darkStone = makeMat('#53564e', 0.91, 0, makeNoiseTexture('#53564e', 18, 3, 2));
@@ -103,6 +124,12 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     const darkWood = makeMat('#33271f', 0.78, 0);
     const ivory = makeMat('#e5dac3', 0.78, 0);
     const stone = makeMat('#aaa28f', 0.86, 0);
+    for (const material of [plaster, darkPlaster, darkStone, stone]) {
+      material.map = stoneColorMap;
+      material.normalMap = stoneNormalMap;
+      material.roughnessMap = stoneRoughnessMap;
+      material.needsUpdate = true;
+    }
     const greenery = makeMat('#58724c', 0.96, 0, makeNoiseTexture('#58724c', 12, 2, 2));
     const grassMat = makeMat('#687e58', 0.98, 0, makeNoiseTexture('#687e58', 14, 20, 20));
     const pathMat = makeMat('#b9af99', 0.92, 0, makeNoiseTexture('#b9af99', 16, 6, 20));
@@ -493,15 +520,62 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     fountain.add(fountainLight);
     addBlocker(3.8, 39.5, 2.25, 2.25);
 
-    // Marian prayer grotto at the garden edge.
-    addBox(world, 2.8, 3.2, 1.25, stone, 10.8, 1.6, 43.5);
-    const grottoArch = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.16, 12, 40, Math.PI), ivory);
-    grottoArch.position.set(10.8, 2.9, 42.8);
-    grottoArch.rotation.z = Math.PI;
-    world.add(grottoArch);
-    addMesh(world, new THREE.SphereGeometry(0.35, 16, 12), ivory, 10.8, 3.8, 43.2);
-    addMesh(world, new THREE.ConeGeometry(0.62, 1.55, 8), makeMat('#d8d4c7'), 10.8, 2.35, 43.2);
-    addCylinder(world, 0.18, 0.24, 0.7, trim, 10.8, 0.35, 43.2, 12, true);
+    // Marian grotto: a continuous path leads to a dedicated 3D prayer alcove.
+    for (let x = 4; x <= 16; x += 2) {
+      addMesh(world, new THREE.BoxGeometry(1.85, 0.055, 2.05), pathMat, x, 0.015, 49.5, false, true);
+    }
+    const maryGrotto = new THREE.Group();
+    maryGrotto.position.set(16.4, 0, 49.5);
+    world.add(maryGrotto);
+    addBox(maryGrotto, 3.65, 4.2, 1.35, darkStone, 0, 2.1, 0);
+    addBox(maryGrotto, 2.7, 0.28, 1.8, trim, 0, 4.15, -0.12);
+    // Real photograph of a Lourdes statue is mapped onto a vertical plane inside a
+    // sculpted 3D stone frame. This is a photo-textured display, not a claimed 3D scan.
+    const maryImage = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.75, 2.25),
+      new THREE.MeshStandardMaterial({ map: maryShrinePhoto, roughness: 0.92, side: THREE.DoubleSide })
+    );
+    maryImage.position.set(-0.02, 2.55, -0.69);
+    maryGrotto.add(maryImage);
+    addBox(maryGrotto, 2.1, 0.12, 0.18, trim, 0, 1.35, -0.77);
+    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, -1.0, 2.62, -0.77);
+    addBox(maryGrotto, 0.12, 2.55, 0.18, trim, 1.0, 2.62, -0.77);
+    const maryArchCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-1.08, 3.72, -0.76),
+      new THREE.Vector3(-0.9, 4.05, -0.76),
+      new THREE.Vector3(-0.48, 4.28, -0.76),
+      new THREE.Vector3(0, 4.36, -0.76),
+      new THREE.Vector3(0.48, 4.28, -0.76),
+      new THREE.Vector3(0.9, 4.05, -0.76),
+      new THREE.Vector3(1.08, 3.72, -0.76),
+    ]);
+    maryGrotto.add(new THREE.Mesh(new THREE.TubeGeometry(maryArchCurve, 48, 0.12, 10, false), trim));
+    for (const x of [-1.18, 1.18]) {
+      addCylinder(maryGrotto, 0.12, 0.2, 1.2, darkWood, x, 0.62, -0.18, 12);
+      addCylinder(maryGrotto, 0.12, 0.12, 0.38, ivory, x, 1.42, -0.18, 16);
+      addMesh(maryGrotto, new THREE.ConeGeometry(0.075, 0.22, 10), makeMat('#f4ce82', 0.35, 0.05), x, 1.72, -0.18, false, false);
+      const candleGlow = new THREE.PointLight('#ffcf88', 0.5, 2.8, 2);
+      candleGlow.position.set(x, 1.9, -0.18);
+      maryGrotto.add(candleGlow);
+    }
+    // A kneeler and low seat mark the place to pause and pray.
+    addBox(maryGrotto, 1.55, 0.18, 0.52, wood, 0, 0.62, 1.45);
+    addBox(maryGrotto, 1.55, 0.72, 0.16, wood, 0, 0.98, 1.75);
+    addBlocker(16.4, 49.5, 1.75, 1.2);
+    addBlocker(16.4, 50.95, 0.95, 0.35);
+
+    // A real cathedral photograph is presented as a framed architectural reference panel
+    // mounted on the side-aisle wall, integrated into the surrounding 3D masonry.
+    const cathedralPhotoPanel = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.55, 3.8),
+      new THREE.MeshStandardMaterial({ map: cathedralInteriorPhoto, roughness: 0.88, side: THREE.DoubleSide })
+    );
+    cathedralPhotoPanel.position.set(-13.92, 10.5, -7.8);
+    cathedralPhotoPanel.rotation.y = Math.PI / 2;
+    world.add(cathedralPhotoPanel);
+    addBox(world, 0.18, 4.0, 2.75, trim, -13.88, 10.5, -7.8);
+    addBox(world, 0.16, 0.15, 2.85, darkWood, -13.78, 12.55, -7.8);
+    addBox(world, 0.16, 0.15, 2.85, darkWood, -13.78, 8.45, -7.8);
 
     // Wooden benches and warm low garden lamps.
     for (const x of [-6.7, 7.1]) {
@@ -602,6 +676,36 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
     nameLabel.scale.set(0.78, 0.15, 1);
     nameLabel.position.set(0, 2.72, 0);
     avatar.add(nameLabel);
+    // A small 3D rosary: ten visible beads and a cross held between the visitor's hands.
+    const rosary = new THREE.Group();
+    rosary.position.set(0, 1.18, -0.22);
+    rosary.visible = false;
+    avatar.add(rosary);
+    const rosaryBeadMaterial = new THREE.MeshStandardMaterial({
+      color: '#e6d6bb', roughness: 0.35, metalness: 0.15, emissive: '#493c2a', emissiveIntensity: 0.08,
+    });
+    for (let i = 0; i < 10; i += 1) {
+      const angle = (Math.PI * 2 * i) / 10;
+      const bead = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), rosaryBeadMaterial);
+      bead.position.set(Math.cos(angle) * 0.23, Math.sin(angle) * 0.16, 0);
+      rosary.add(bead);
+    }
+    const rosaryCross = new THREE.Group();
+    rosaryCross.position.set(0, -0.33, 0);
+    rosary.add(rosaryCross);
+    const rosaryGold = makeMat('#c8aa72', 0.3, 0.6);
+    addMesh(rosaryCross, new THREE.BoxGeometry(0.055, 0.27, 0.045), rosaryGold, 0, 0, 0, false, false);
+    addMesh(rosaryCross, new THREE.BoxGeometry(0.19, 0.05, 0.045), rosaryGold, 0, 0.045, 0, false, false);
+
+
+    // Available seats are reserved locally for the current visitor.
+    const seatSpots: THREE.Vector3[] = [];
+    for (const z of [-9.7, -6.2, -2.7, 0.8, 4.3, 7.8]) {
+      for (const sideX of [-4.25, 4.25]) {
+        for (const offset of [-1.0, 0, 1.0]) seatSpots.push(new THREE.Vector3(sideX + offset, 0, z - 0.55));
+      }
+    }
+    const occupiedSeats = new Set<number>();
 
     // Collision-aware movement around the architecture and garden furniture.
     addBlocker(-14.4, -1, 0.4, 21);
@@ -818,11 +922,7 @@ export default function ImmersiveAvatarScene({ displayName }: Props) {
           materials.forEach(material => material.dispose());
         }
       });
-      scene.traverse(object => {
-        if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshStandardMaterial && object.material.map) {
-          object.material.map.dispose();
-        }
-      });
+      loadedTextures.forEach(texture => texture.dispose());
       labelTexture.dispose();
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
