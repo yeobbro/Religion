@@ -134,10 +134,13 @@ export default function ChapelExperience() {
   };
 
   const enterImmersive = () => {
-    if (!baptismalName.trim()) {
-      setEntryNotice('입장할 세례명을 입력해 주세요.');
-      return;
-    }
+    const randomBaptismalNames = [
+      '요셉', '마리아', '베드로', '바오로', '요한', '안나',
+      '세실리아', '프란치스코', '아녜스', '미카엘', '가브리엘', '데레사',
+    ] as const;
+    const chosenName = baptismalName.trim()
+      || randomBaptismalNames[Math.floor(Math.random() * randomBaptismalNames.length)];
+    setBaptismalName(chosenName);
     setEntryNotice('');
     setImmersive(true);
     if (document.fullscreenEnabled && !document.fullscreenElement) {
@@ -183,23 +186,23 @@ export default function ChapelExperience() {
             <div className="lobby-entry-profile">
               <div className="lobby-avatar-card">
                 <span className="lobby-avatar-mark">Y</span>
-                <span><strong>{baptismalName.trim() || '나의 아바타'}</strong><small>입장할 세례명</small></span>
+                <span><strong>{baptismalName.trim() || '랜덤 세례명'}</strong><small>비워두면 자동으로 세례명을 정해드려요</small></span>
               </div>
               <label className="lobby-baptismal-field">
-                <span>세례명</span>
+                <span>세례명 (선택)</span>
                 <input
                   value={baptismalName}
                   onChange={event => { setBaptismalName(event.target.value.slice(0, 18)); setEntryNotice(''); }}
                   onKeyDown={event => { if (event.key === 'Enter') enterImmersive(); }}
                   maxLength={18}
-                  placeholder="예: 요셉"
+                  placeholder="예: 요셉 · 비워두어도 돼요"
                   autoComplete="off"
                   aria-label="입장할 세례명"
                 />
               </label>
               {entryNotice ? <p className="lobby-entry-notice" role="alert">{entryNotice}</p> : null}
             </div>
-            <button type="button" className="lobby-enter" onClick={enterImmersive} disabled={!baptismalName.trim()}>입장하기 <span>→</span></button>
+            <button type="button" className="lobby-enter" onClick={enterImmersive}>입장하기 <span>→</span></button>
           </div>
           <div className="lobby-photo-credit">성당에서 시작해 문을 열고 정원으로 이어지는 공간</div>
         </div>
