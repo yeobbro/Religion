@@ -253,7 +253,11 @@ export default function Chapel3DScene({ onCandleChange }: Props) {
     <div className="scene3d-wrap">
       <div className="scene3d-canvas" ref={hostRef} aria-label="마우스와 키보드로 둘러볼 수 있는 3D 성당 내부" />
       <div className="scene3d-overlay"><span className="scene3d-live"><i /> INTERACTIVE CHAPEL</span><span className="scene3d-hint">{hint}</span></div>
-      <div className="scene3d-bottom"><span>🕯 {litCount}개의 촛불이 밝혀져 있습니다</span><span>WASD 이동 · 드래그 회전 · 휠 확대</span></div>
+      <div className="scene3d-bottom"><span>🕯 {litCount}개의 촛불이 밝혀져 있습니다</span><span className="desktop-controls-hint">WASD 이동 · 드래그 회전 · 휠 확대</span></div>
+      <div className="touch-pad" aria-label="모바일 이동 조작">
+        <button type="button" aria-label="앞으로 이동" onPointerDown={e => { e.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))}>▲</button>
+        <div><button type="button" aria-label="왼쪽 이동" onPointerDown={e => { e.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))}>◀</button><button type="button" aria-label="뒤로 이동" onPointerDown={e => { e.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 's' }))}>▼</button><button type="button" aria-label="오른쪽 이동" onPointerDown={e => { e.preventDefault(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' })); }} onPointerUp={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerLeave={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))} onPointerCancel={() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'd' }))}>▶</button></div>
+      </div>
     </div>
   );
 }
