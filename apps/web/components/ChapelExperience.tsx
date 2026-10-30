@@ -12,7 +12,6 @@ const parishId = process.env.NEXT_PUBLIC_PARISH_ID;
 const audioUrl = process.env.NEXT_PUBLIC_GREGORIAN_AUDIO_URL || 'https://upload.wikimedia.org/wikipedia/commons/9/96/Veni.sancte.spiritus.ogg';
 const gardenAudioUrl = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Gentle_breeze_and_birds_singing.ogg';
 const chapelPhotoUrl = 'https://images.unsplash.com/photo-1759432916468-d44411b5a661?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=2400';
-const gardenPhotoUrl = 'https://images.unsplash.com/photo-1778305071414-3aab2bda751a?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=2400';
 
 export default function ChapelExperience() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -24,7 +23,7 @@ export default function ChapelExperience() {
   const [notice, setNotice] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.35);
-  const [space, setSpace] = useState<'chapel' | 'garden'>('chapel');
+  const space = 'chapel' as const;
   const [immersive, setImmersive] = useState(false);
   const [baptismalName, setBaptismalName] = useState('');
   const [entryNotice, setEntryNotice] = useState('');
@@ -163,17 +162,12 @@ export default function ChapelExperience() {
 
   if (immersive) {
     return (
-      <main className={`immersive-room ${space === 'chapel' ? 'immersive-chapel' : 'immersive-garden'}`}>
-
+      <main className="immersive-room immersive-chapel">
         <header className="immersive-toolbar">
           <div className="immersive-player" aria-label={`${baptismalName} avatar`}><span className="immersive-avatar-mark">{baptismalName.trim().slice(0, 1)}</span></div>
-          <div className="immersive-space-switch" aria-label="공간 선택">
-            <button type="button" className={space === 'chapel' ? 'active' : ''} onClick={() => setSpace('chapel')}>성당</button>
-            <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
-          </div>
           <button type="button" className="immersive-exit" onClick={leaveImmersive} aria-label="체험 나가기">×</button>
         </header>
-        <section className="immersive-world" aria-label={space === 'chapel' ? '성당 체험 공간' : '정원 체험 공간'}><ImmersiveAvatarScene space={space} displayName={baptismalName.trim()} /></section>
+        <section className="immersive-world" aria-label="성당과 정원이 연결된 가상 공간"><ImmersiveAvatarScene displayName={baptismalName.trim()} /></section>
       </main>
     );
   }
@@ -183,12 +177,8 @@ export default function ChapelExperience() {
       <header className="topbar"><a className="brand" href="#"><span className="brand-mark">✝</span><span>RELIGION<small>함께 머무는 기도의 공간</small></span></a><div className="top-meta"><span className="live-dot" /> 온라인 기도 공간 <span className="meta-divider" /> 가톨릭 · 본당 공동체</div></header>
       <section className="hero">
         <div className="hero-copy"><p className="eyebrow">A QUIET PLACE TO PRAY</p><h1>잠시 머물며,<br/><em>함께 기도합니다.</em></h1><p className="hero-description">마음에 담아둔 지향을 촛불에 맡기고,<br/>우리 공동체의 기도를 하나로 모아보세요.</p><a className="hero-link" href="#offering">기도 봉헌하기 <span>↓</span></a></div>
-        <div className="lobby-visual" style={{ backgroundImage: `linear-gradient(180deg,rgba(13,17,15,.16),rgba(13,17,15,.18) 42%,rgba(13,17,15,.82)), url("${space === 'chapel' ? chapelPhotoUrl : gardenPhotoUrl}")` }}>
-          <div className="lobby-topline"><span>{space === 'chapel' ? 'CATHOLIC CHAPEL' : 'QUIET GARDEN'}</span><span className="lobby-online"><i /> {room.status === 'connected' ? `${room.occupancy}명 머무는 중` : '나만의 공간'}</span></div>
-          <div className="lobby-space-switch">
-            <button type="button" className={space === 'chapel' ? 'active' : ''} onClick={() => setSpace('chapel')}>성당</button>
-            <button type="button" className={space === 'garden' ? 'active' : ''} onClick={() => setSpace('garden')}>정원</button>
-          </div>
+        <div className="lobby-visual" style={{ backgroundImage: `linear-gradient(180deg,rgba(13,17,15,.16),rgba(13,17,15,.18) 42%,rgba(13,17,15,.82)), url("${chapelPhotoUrl}")` }}>
+          <div className="lobby-topline"><span>CHAPEL · COURTYARD GARDEN</span><span className="lobby-online"><i /> {room.status === 'connected' ? `${room.occupancy}명 머무는 중` : '나만의 공간'}</span></div>
           <div className="lobby-bottom">
             <div className="lobby-entry-profile">
               <div className="lobby-avatar-card">
@@ -211,7 +201,7 @@ export default function ChapelExperience() {
             </div>
             <button type="button" className="lobby-enter" onClick={enterImmersive} disabled={!baptismalName.trim()}>입장하기 <span>→</span></button>
           </div>
-          <div className="lobby-photo-credit">{space === 'chapel' ? 'Photo by Georgi Kalaydzhiev' : 'Photo by Shawn Kim'} · Unsplash</div>
+          <div className="lobby-photo-credit">성당에서 시작해 문을 열고 정원으로 이어지는 공간</div>
         </div>
       </section>
       <div className="content-grid">
