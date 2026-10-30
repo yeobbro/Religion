@@ -147,6 +147,9 @@ const findPath = (blockers: Blocker[], bounds: Site['bounds'], sx: number, sz: n
   return out;
 };
 
+/** Long label on wide screens, short label on phones. */
+const L = ({ long, short }: { long: string; short: string }) => <><span className="lbl-long">{long}</span><span className="lbl-short">{short}</span></>;
+
 export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPresence }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<Api | null>(null);
@@ -162,6 +165,16 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
   const [loading, setLoading] = useState(true);
   const [rosaryOpen, setRosaryOpen] = useState(false);
   const [phrasesOpen, setPhrasesOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'in' | 'out' }[]>([]);
+  const toastId = useRef(0);
+  const toast = (text: string, kind: 'in' | 'out') => {
+    const id = ++toastId.current;
+    setToasts(t => [...t.slice(-2), { id, text, kind }]);
+    window.setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4500);
+  };
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const [entered, setEntered] = useState(false);
   const [outfit, setOutfit] = useState<Outfit>('casual');
   const onIndoorRef = useRef(onIndoor);
@@ -365,6 +378,9 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       onPresenceRef.current?.({ server: v.server, count: 1, status: 'connecting' });
       joinServer(v.server, { name: v.name, outfit: v.outfit }, scene, {
         onCount: n => onPresenceRef.current?.({ server: v.server, count: n, status: 'online' }),
+        onArrive: name => toastRef.current(`${name}님이 성당에 들어오셨어요`, 'in'),
+        onDepart: name => toastRef.current(`${name}님이 평화 속에 떠나셨어요`, 'out'),
+        onAlreadyHere: names => toastRef.current(names.length === 1 ? `${names[0]}님이 함께 머물고 계세요` : `${names.slice(0, 2).join('·')}님${names.length > 2 ? ` 외 ${names.length - 2}명` : ''}이 함께 머물고 계세요`, 'in'),
         onCandle: slot => {
           if (slot < 0 || slot >= site.candleStand.slots.length || site.candleStand.isLit(slot)) return;
           site.candleStand.light(slot);
@@ -993,26 +1009,31 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         />
       ) : null}
 
-      {entered ? <div className="world-action-notice" role="status">{notice}</div> : null}
+      {entered ? <div className={`world-action-notice${moreOpen ? ' dim' : ''}`} role="status">{notice}</div> : null}
+      <div className="presence-toasts" aria-live="polite">
+        {toasts.map(t => <div key={t.id} className={`presence-toast ${t.kind}`}>{t.kind === 'in' ? '🕊' : '🌙'} {t.text}</div>)}
+      </div>
       {entered && phrasesOpen && confession === 'off' ? (
         <div className="phrase-menu" role="menu" aria-label="함께 있는 사람에게 건네는 말">
           {PHRASES.map(t => <button key={t} type="button" role="menuitem" onClick={() => { apiRef.current?.say(t); setPhrasesOpen(false); }}>{t}</button>)}
         </div>
       ) : null}
-      <div className="world-action-bar" role="group" aria-label="동작" hidden={confession !== 'off' || !entered}>
-        <button type="button" onClick={() => act('cross')}>✝ 성호 긋기</button>
-        <button type="button" aria-pressed={state.praying} onClick={() => act('prayer')}>🙏 {state.praying ? '기도 마치기' : '기도하기'}</button>
-        <button type="button" aria-pressed={state.rosary} onClick={() => act('rosary')}>📿 {state.rosary ? '묵주 내려놓기' : '묵주기도'}</button>
+      <div className={`world-action-bar${moreOpen ? ' more-open' : ''}`} role="group" aria-label="동작" hidden={confession !== 'off' || !entered}>
+        {/* On phones only the first four show; the rest open from 더보기. */}
+        <button type="button" onClick={() => act('cross')}>✝ <L long="성호 긋기" short="성호" /></button>
+        <button type="button" aria-pressed={state.praying} onClick={() => act('prayer')}>🙏 <L long={state.praying ? '기도 마치기' : '기도하기'} short={state.praying ? '마치기' : '기도'} /></button>
+        <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 <L long={state.sitting ? '일어나기' : '앉기'} short={state.sitting ? '일어나기' : '앉기'} /> <kbd>Space</kbd></button>
+        <button type="button" className="secondary" aria-pressed={state.rosary} onClick={() => { setMoreOpen(false); act('rosary'); }}>📿 {state.rosary ? '묵주 내려놓기' : '묵주기도'}</button>
+        <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('candle'); }}>🕯 초 봉헌</button>
         {outfit === 'casual' || outfit === 'dress'
-          ? <button type="button" aria-pressed={state.veil} onClick={() => act('veil')}>{state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
+          ? <button type="button" className="secondary" aria-pressed={state.veil} onClick={() => { setMoreOpen(false); act('veil'); }}>⛑ {state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
           : null}
-        <button type="button" onClick={() => act('bow')}>목례</button>
-        <button type="button" onClick={() => act('greet')}>인사</button>
-        <button type="button" aria-expanded={phrasesOpen} onClick={() => setPhrasesOpen(o => !o)}>💬 한마디</button>
-        <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 {state.sitting ? '일어나기' : '앉기'} <kbd>Space</kbd></button>
-        <button type="button" onClick={() => act('candle')}>🕯 초 봉헌</button>
-        <button type="button" onClick={() => act('confess')}>고해소</button>
-        <button type="button" onClick={() => act('mary')}>🌹 성모님께</button>
+        <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('bow'); }}>🙇 목례</button>
+        <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('greet'); }}>👋 인사</button>
+        <button type="button" className="secondary" aria-expanded={phrasesOpen} onClick={() => { setMoreOpen(false); setPhrasesOpen(o => !o); }}>💬 한마디</button>
+        <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('confess'); }}>⛪ 고해소</button>
+        <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('mary'); }}>🌹 성모님께</button>
+        <button type="button" className="more-toggle" aria-expanded={moreOpen} onClick={() => setMoreOpen(o => !o)}>{moreOpen ? '✕ 닫기' : '⋯ 더보기'}</button>
       </div>
       <div className="mobile-joystick" hidden={!entered} role="application" aria-label="이동 조이스틱"
         onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); moveJoystick(e); }}

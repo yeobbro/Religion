@@ -1,6 +1,6 @@
 # Audio credits
 
-Wikimedia Commons 음원을 받아 MP3(VBR q5)로 다시 인코딩해 이 저장소에서 직접 제공합니다. 내용은 바꾸지 않았습니다.
+Wikimedia Commons 음원을 받아 MP3로 다시 인코딩해 이 저장소에서 직접 제공합니다. 곡 사이 음량 차이를 줄이려고 음량만 고르게 맞췄고(loudnorm), 내용은 바꾸지 않았습니다.
 
 | 파일 | 곡 | 연주·작가 | 라이선스 | 원본 |
 |---|---|---|---|---|
@@ -15,3 +15,9 @@ Wikimedia Commons 음원을 받아 MP3(VBR q5)로 다시 인코딩해 이 저장
 | `widor-toccata.mp3` | 오르간 교향곡 5번 중 토카타 · 비도르 · 파이프오르간 | Norbert Schenk | CC BY 4.0 | [Widor, Orgelsinfonie Nr. 5 f-moll, Toccata, Norbert Schenk.mp3](https://commons.wikimedia.org/wiki/File:Widor,_Orgelsinfonie_Nr._5_f-moll,_Toccata,_Norbert_Schenk.mp3) |
 | `garden-breeze-birds.mp3` | 정원의 바람과 새소리 | ezwa | Public domain | [Gentle_breeze_and_birds_singing.ogg](https://commons.wikimedia.org/wiki/File:Gentle_breeze_and_birds_singing.ogg) |
 | `wholesome-kevin-macleod.mp3` | Wholesome (잔잔한 배경음악) | Kevin MacLeod (incompetech.com) | CC BY 4.0 | [Wholesome_by_Kevin_MacLeod.ogg](https://commons.wikimedia.org/wiki/File:Wholesome_by_Kevin_MacLeod.ogg) |
+| pater-noster.mp3 | 주님의 기도 (Pater Noster) | Schola Gregoriana | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Pater_Noster.ogg |
+| ave-maria-chant.mp3 | 성모송 (Ave Maria) | Schola Gregoriana | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Ave_Maria.ogg |
+| deus-in-adjutorium.mp3 | Deus in adjutorium | Schola Gregoriana | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Deus_in_adjutorium_meum_intende.ogg |
+| kyrie-chant.mp3 | Kyrie eleison | Schola Gregoriana | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Kyrie_eleison.ogg |
+| magnificat.mp3 | Antiphona et Magnificat | Schola Gregoriana | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Antiphona_et_Magnificat.ogg |
+| salve-regina.mp3 | Salve Regina (Hermann Contract) | Les Petits Chanteurs de Passy | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Petits_Chanteurs_de_Passy_-_Salve_Regina_de_Hermann_Contract.ogg |

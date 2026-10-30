@@ -96,6 +96,70 @@ export const TRACKS: Track[] = [
   }
 ];
 
+/** Chanted prayers the visitor can choose to listen to on their own (not part of the live broadcast). */
+export const PRAYERS: Track[] = [
+  {
+    "id": "pater-noster",
+    "title": "주님의 기도 (Pater Noster)",
+    "composer": "그레고리오 성가",
+    "performer": "Schola Gregoriana",
+    "src": "/audio/pater-noster.mp3",
+    "duration": 75.1,
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Pater_Noster.ogg"
+  },
+  {
+    "id": "ave-maria-chant",
+    "title": "성모송 (Ave Maria)",
+    "composer": "그레고리오 성가",
+    "performer": "Schola Gregoriana",
+    "src": "/audio/ave-maria-chant.mp3",
+    "duration": 70.7,
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Ave_Maria.ogg"
+  },
+  {
+    "id": "deus-in-adjutorium",
+    "title": "하느님, 저를 도우소서 (Deus in adjutorium)",
+    "composer": "시간전례 시작 기도",
+    "performer": "Schola Gregoriana",
+    "src": "/audio/deus-in-adjutorium.mp3",
+    "duration": 58.5,
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Deus_in_adjutorium_meum_intende.ogg"
+  },
+  {
+    "id": "kyrie-chant",
+    "title": "자비송 (Kyrie eleison)",
+    "composer": "그레고리오 성가",
+    "performer": "Schola Gregoriana",
+    "src": "/audio/kyrie-chant.mp3",
+    "duration": 42.1,
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Kyrie_eleison.ogg"
+  },
+  {
+    "id": "magnificat",
+    "title": "성모의 노래 (Magnificat)",
+    "composer": "저녁기도 · 그레고리오 성가",
+    "performer": "Schola Gregoriana",
+    "src": "/audio/magnificat.mp3",
+    "duration": 217.0,
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Schola_Gregoriana-Antiphona_et_Magnificat.ogg"
+  },
+  {
+    "id": "salve-regina",
+    "title": "모후이시며 (Salve Regina)",
+    "composer": "헤르만 콘트락투스 · 소년 합창",
+    "performer": "Les Petits Chanteurs de Passy",
+    "src": "/audio/salve-regina.mp3",
+    "duration": 190.1,
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Petits_Chanteurs_de_Passy_-_Salve_Regina_de_Hermann_Contract.ogg"
+  }
+];
+
 export const AMBIENCE = [
   {
     "id": "garden-breeze-birds",

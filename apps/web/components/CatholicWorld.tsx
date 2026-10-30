@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import ImmersiveAvatarScene, { type PresenceInfo, type Visitor } from './ImmersiveAvatarScene';
 import { SERVERS } from '@/lib/world/presence';
 import { VISITOR_OUTFITS, type Outfit } from '@/lib/world/avatar';
-import { AMBIENCE, IMAGES, TEXTURES, TRACKS } from '@/lib/world/credits';
+import { AMBIENCE, IMAGES, PRAYERS, TEXTURES, TRACKS, type Track } from '@/lib/world/credits';
 
 const BAPTISMAL_NAMES = [
   '프란치스코', '마리아', '요셉', '베드로', '바오로', '안나', '데레사', '아녜스', '미카엘', '가브리엘',
@@ -49,7 +49,14 @@ export default function CatholicWorld() {
   const [track, setTrack] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.55);
+  // Starts soft and fades in; the visitor can raise it from the music panel.
+  const [volume, setVolume] = useState(0.3);
+  /** 'live' follows the shared broadcast; otherwise the visitor picked a chant or prayer to hear alone. */
+  const [mode, setMode] = useState<'live' | 'chant' | 'prayer'>('live');
+  const [picked, setPicked] = useState<Track | null>(null);
+  const modeRef = useRef<{ mode: 'live' | 'chant' | 'prayer'; picked: Track | null }>({ mode: 'live', picked: null });
+  modeRef.current = { mode, picked };
+  const fade = useRef(0);
   const [muted, setMuted] = useState(false);
   const [placeholder, setPlaceholder] = useState('프란치스코');
   const [server, setServer] = useState(1);
@@ -84,10 +91,33 @@ export default function CatholicWorld() {
   const applyVolumes = useCallback(() => {
     const { volume: v, muted: m } = volumeRef.current;
     const k = indoor.current;
-    if (music.current) music.current.volume = m ? 0 : Math.min(1, v * (0.22 + 0.78 * k));
-    if (garden.current) garden.current.volume = m ? 0 : Math.min(1, v * 0.9 * (1 - k));
+    const f = fade.current;
+    if (music.current) music.current.volume = m ? 0 : Math.min(1, v * f * (0.22 + 0.78 * k));
+    if (garden.current) garden.current.volume = m ? 0 : Math.min(1, v * f * 0.9 * (1 - k));
   }, []);
   useEffect(applyVolumes, [volume, muted, applyVolumes]);
+
+  /** Gentle 5-second fade-in so the first sound never startles. */
+  const fadeIn = useCallback(() => {
+    fade.current = 0;
+    const t0 = performance.now();
+    const step = () => {
+      fade.current = Math.min(1, (performance.now() - t0) / 5000);
+      applyVolumes();
+      if (fade.current < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [applyVolumes]);
+
+  /** Play one chosen chant or prayer from the beginning (just for this visitor). */
+  const playPicked = useCallback(async (t: Track) => {
+    const a = music.current;
+    if (!a) return;
+    setPicked(t);
+    a.src = t.src;
+    a.currentTime = 0;
+    try { await a.play(); setPlaying(true); } catch { setPlaying(false); }
+  }, []);
 
   /** Jump to the live point of the broadcast. */
   const syncLive = useCallback(async () => {
@@ -116,12 +146,19 @@ export default function CatholicWorld() {
     g.loop = true;
     g.preload = 'auto';
     garden.current = g;
-    const onEnded = () => { void syncLive(); };
+    const onEnded = () => {
+      const { mode: m, picked: p } = modeRef.current;
+      if (m === 'live' || !p) { void syncLive(); return; }
+      // Continue with the next piece in the chosen list.
+      const list = m === 'prayer' ? PRAYERS : TRACKS;
+      const i = list.findIndex(x => x.id === p.id);
+      void playPicked(list[(i + 1) % list.length]);
+    };
     const onTime = () => setElapsed(a.currentTime);
     a.addEventListener('ended', onEnded);
     a.addEventListener('timeupdate', onTime);
     // Coming back to the tab: rejoin the live broadcast instead of drifting.
-    const onVisible = () => { if (document.visibilityState === 'visible' && !a.paused) void syncLive(); };
+    const onVisible = () => { if (document.visibilityState === 'visible' && !a.paused && modeRef.current.mode === 'live') void syncLive(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       a.pause(); g.pause();
@@ -129,7 +166,7 @@ export default function CatholicWorld() {
       a.removeEventListener('timeupdate', onTime);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [syncLive]);
+  }, [syncLive, playPicked]);
 
   const enter = (e?: FormEvent) => {
     e?.preventDefault();
@@ -138,20 +175,26 @@ export default function CatholicWorld() {
     const url = new URL(window.location.href);
     url.searchParams.set('server', String(server));
     window.history.replaceState(null, '', url);
-    applyVolumes();
+    fadeIn();
     void syncLive();
     garden.current?.play().catch(() => undefined);
   };
+  const goLive = () => { setMode('live'); setPicked(null); void syncLive(); };
+  const choose = (m: 'chant' | 'prayer', t: Track) => { setMode(m); void playPicked(t); garden.current?.play().catch(() => undefined); };
 
   const togglePlay = () => {
     const a = music.current;
     if (!a) return;
-    if (a.paused) { void syncLive(); garden.current?.play().catch(() => undefined); }
+    if (a.paused) {
+      if (mode === 'live' || !picked) void syncLive(); else void a.play().then(() => setPlaying(true)).catch(() => undefined);
+      garden.current?.play().catch(() => undefined);
+    }
     else { a.pause(); garden.current?.pause(); setPlaying(false); }
   };
 
   const onIndoor = useCallback((v: number) => { indoor.current = v; applyVolumes(); }, [applyVolumes]);
-  const cur = TRACKS[track];
+  const cur = mode !== 'live' && picked ? picked : TRACKS[track];
+  const live = mode === 'live';
 
   return (
     <main className="catholic-world">
@@ -165,7 +208,7 @@ export default function CatholicWorld() {
           </button>
         ) : null}
         <button type="button" className={`world-chip music ${playing ? 'on' : ''}`} onClick={() => setMusicOpen(o => !o)} aria-expanded={musicOpen}>
-          <span className="live-dot" aria-hidden="true" />{playing ? 'LIVE' : '성가'} · <span className="chip-title">{cur.title}</span>
+          <span className="live-dot" aria-hidden="true" />{playing ? (live ? 'LIVE' : '♪') : '성가'} · <span className="chip-title">{cur.title}</span>
         </button>
       </div>
 
@@ -191,20 +234,38 @@ export default function CatholicWorld() {
       {musicOpen ? (
         <section className="music-panel" aria-label="성당 성가">
           <header>
-            <strong>지금 성당에 흐르는 성가</strong>
+            <strong>{live ? '지금 성당에 흐르는 성가' : mode === 'prayer' ? '기도 노래 듣기' : '성가 골라 듣기'}</strong>
             <button type="button" className="panel-x" onClick={() => setMusicOpen(false)} aria-label="닫기">×</button>
           </header>
+          <div className="music-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={live} onClick={goLive}>● LIVE 함께</button>
+            <button type="button" role="tab" aria-selected={mode === 'chant'} onClick={() => choose('chant', TRACKS[track])}>성가 고르기</button>
+            <button type="button" role="tab" aria-selected={mode === 'prayer'} onClick={() => choose('prayer', PRAYERS[0])}>기도 노래</button>
+          </div>
           <p className="music-now"><b>{cur.title}</b><span>{cur.composer} · {cur.performer}</span></p>
           <div className="music-progress"><i style={{ width: `${Math.min(100, (elapsed / cur.duration) * 100)}%` }} /></div>
           <div className="music-time"><span>{fmt(elapsed)}</span><span>{fmt(cur.duration)}</span></div>
           <div className="music-controls">
-            <button type="button" onClick={togglePlay}>{playing ? '❚❚ 잠시 멈춤' : '▶ 함께 듣기'}</button>
+            <button type="button" onClick={togglePlay}>{playing ? '❚❚ 잠시 멈춤' : '▶ 듣기'}</button>
             <button type="button" onClick={() => setMuted(m => !m)} aria-pressed={muted}>{muted ? '🔇' : '🔈'}</button>
             <input type="range" min={0} max={1} step={0.01} value={volume} onChange={e => setVolume(Number(e.target.value))} aria-label="음량" />
           </div>
-          <p className="music-note">모든 방문자가 같은 순간의 성가를 듣습니다. 성당 밖 정원에서는 성가가 잦아들고 바람과 새소리가 들립니다.</p>
+          <p className="music-note">{live
+            ? '모든 방문자가 같은 순간의 성가를 함께 듣습니다. 정원에서는 성가가 잦아들고 바람과 새소리가 들립니다.'
+            : mode === 'prayer'
+              ? '라틴어로 노래하는 기도입니다. 곡을 누르면 처음부터 나만 듣고, 끝나면 다음 기도로 이어집니다.'
+              : '듣고 싶은 성가를 누르면 처음부터 나만 듣습니다. LIVE를 누르면 다시 다른 방문자와 같은 성가로 돌아갑니다.'}</p>
           <ol className="music-list">
-            {TRACKS.map((t, i) => <li key={t.id} className={i === track ? 'now' : ''}><span>{t.title}</span><em>{fmt(t.duration)}</em></li>)}
+            {(mode === 'prayer' ? PRAYERS : TRACKS).map((t, i) => {
+              const now = live ? i === track : picked?.id === t.id;
+              return (
+                <li key={t.id} className={now ? 'now' : ''}>
+                  <button type="button" onClick={() => choose(mode === 'prayer' ? 'prayer' : 'chant', t)} aria-current={now ? 'true' : undefined}>
+                    <span>{t.title}</span><em>{fmt(t.duration)}</em>
+                  </button>
+                </li>
+              );
+            })}
           </ol>
         </section>
       ) : null}
@@ -219,6 +280,8 @@ export default function CatholicWorld() {
             <p className="credits-lead">이 공간의 사진·음원은 공개 라이선스 자료와 KREWX가 제공한 레퍼런스 이미지를 사이트에서 직접 제공합니다. 성당 건축, 조각상, 인물은 코드로 만든 창작물입니다.</p>
             <h3>성가 · 음악</h3>
             <ul>{TRACKS.map(t => <li key={t.id}><b>{t.title}</b> — {t.composer} · 연주/녹음 {t.performer} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
+            <h3>기도 노래</h3>
+            <ul>{PRAYERS.map(t => <li key={t.id}><b>{t.title}</b> — {t.composer} · 연주/녹음 {t.performer} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
             <h3>환경음</h3>
             <ul>{AMBIENCE.map(t => <li key={t.id}><b>{t.title}</b> — {t.author} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
             <h3>스테인드글라스 · 명화</h3>

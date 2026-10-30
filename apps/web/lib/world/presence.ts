@@ -94,7 +94,7 @@ export async function joinServer(
   server: number,
   profile: Profile,
   scene: THREE.Scene,
-  hooks: { onCount: (n: number) => void; onCandle: (slot: number) => void; onError?: (msg: string) => void },
+  hooks: { onCount: (n: number) => void; onCandle: (slot: number) => void; onError?: (msg: string) => void; onArrive?: (name: string, outfit: Outfit) => void; onDepart?: (name: string) => void; onAlreadyHere?: (names: string[]) => void },
 ): Promise<Presence> {
   const { joinRoom, getRelaySockets } = await import('trystero');
   if (process.env.NODE_ENV !== 'production') (window as unknown as { __socks?: () => unknown }).__socks = () => Object.fromEntries(Object.entries(getRelaySockets() as Record<string, WebSocket>).map(([k, v]) => [k, v.readyState]));
@@ -108,6 +108,10 @@ export async function joinServer(
   let last: SelfState | null = null;
   let lastSent = 0;
   let alive = true;
+  // People who were already here when we arrived are announced together, not one by one.
+  const joinedAt = performance.now();
+  const alreadyHere: string[] = [];
+  const settle = window.setTimeout(() => { if (alive && alreadyHere.length) hooks.onAlreadyHere?.(alreadyHere.splice(0)); }, 6000);
 
   const count = () => 1 + [...peers.values()].filter(p => p.profile).length;
   const emitCount = () => hooks.onCount(count());
@@ -125,6 +129,7 @@ export async function joinServer(
     if (!p) return;
     if (p.avatar) { scene.remove(p.avatar.root); p.avatar.dispose(); }
     peers.delete(id);
+    if (alive && p.profile) hooks.onDepart?.(p.profile.name);
     emitCount();
   };
   const build = (p: Peer) => {
@@ -162,6 +167,10 @@ export async function joinServer(
     if (m.t === 'hi') {
       const name = String(m.name ?? '').slice(0, 16) || '순례자';
       const changed = !p.profile || p.profile.name !== name || p.profile.outfit !== m.outfit;
+      if (!p.profile) {
+        if (performance.now() - joinedAt < 6000) alreadyHere.push(name);
+        else hooks.onArrive?.(name, m.outfit);
+      }
       p.profile = { name, outfit: m.outfit };
       if (changed) { build(p); emitCount(); }
     } else if (m.t === 's') {
@@ -231,6 +240,7 @@ export async function joinServer(
     },
     leave: () => {
       alive = false;
+      window.clearTimeout(settle);
       for (const id of [...peers.keys()]) drop(id);
       void room.leave();
     },
