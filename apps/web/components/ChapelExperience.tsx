@@ -61,8 +61,14 @@ export default function ChapelExperience() {
     if (text.length < 3) { setNotice('기도 지향을 세 글자 이상 입력해 주세요.'); return; }
     setLoading(true); setNotice('');
     if (supabase && parishId) {
-      const { error } = await supabase.from('prayer_intentions').insert({ parish_id: parishId, author_id: (await supabase.auth.getUser()).data.user?.id, intention: text, is_public: isPublic, candle_lit: true });
-      if (error) setNotice('봉헌을 저장하지 못했어요. 로그인 및 Supabase 정책 설정을 확인해 주세요.');
+      let { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const authResult = await supabase.auth.signInAnonymously();
+        session = authResult.data.session;
+        if (authResult.error || !session) { setNotice('익명 로그인에 실패했어요. Supabase Anonymous Sign-Ins 설정을 확인해 주세요.'); setLoading(false); return; }
+      }
+      const { error } = await supabase.from('prayer_intentions').insert({ parish_id: parishId, author_id: session.user.id, intention: text, is_public: isPublic, candle_lit: true });
+      if (error) setNotice('봉헌을 저장하지 못했어요. 본당 ID와 Supabase 정책 설정을 확인해 주세요.');
       else if (isPublic) {
         const { data } = await supabase.from('prayer_intentions').select('id, intention, created_at')
           .eq('parish_id', parishId).eq('is_public', true).order('created_at', { ascending: false }).limit(20);
