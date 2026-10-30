@@ -106,6 +106,10 @@ export class HumanAvatar extends Avatar {
       mat.metalness = 0;
       mat.roughness = 0.82;
       if (/opacity/i.test(old.name)) { mat.transparent = false; mat.alphaTest = 0.45; mat.side = THREE.DoubleSide; }
+      // Faces: a soft, clear complexion (gentle self-lit warmth lifts the shadowed texture).
+      if (/head/i.test(old.name) && mat.map) { mat.roughness = 0.6; mat.emissive = new THREE.Color('#3a2620'); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.55; }
+      // Hair cards: deeper, glossier black-brown.
+      if (/opacity/i.test(old.name)) { mat.color = new THREE.Color('#6a5a52'); mat.roughness = 0.55; }
       const url = overrides[old.name];
       if (url) {
         const t = texLoader.load(url);

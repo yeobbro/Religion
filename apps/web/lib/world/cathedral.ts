@@ -5,8 +5,9 @@ import {
   seeded, starVaultTexture, stationTexture,
 } from './textures';
 import { image } from './credits';
-import { createCrucifix, createMarianStatue, disposeGroup } from './statues';
+import { createCrucifix, createMarianStatue, disposeGroup, upgradeCrucifix } from './statues';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { buildTreeVariant, treeMaterials } from './trees';
 
 /**
  * The visitable site in metres: a Gothic cathedral (nave, aisles, apse, side Marian altar,
@@ -571,6 +572,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   crucifix.position.set(0, 5.2, Z_E + 3.2);
   crucifix.scale.setScalar(1.05);
   group.add(crucifix);
+  upgradeCrucifix(crucifix, new GLTFLoader());
   for (const x of [-1.0, 1.0]) bake('iron', new THREE.CylinderGeometry(0.012, 0.012, 14, 4), x, 16.5, Z_E + 3.2, 0, 0, 0, 1, 1, 1, false);
   const crossSpot = new THREE.SpotLight('#ffe4bf', 160, 22, 0.32, 0.55, 1.6);
   crossSpot.position.set(0, 14, Z_E + 10);
@@ -1063,7 +1065,27 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     for (let k = 0; k < 5; k += 1) bake(k % 2 ? 'leaf' : 'leafDark', new THREE.IcosahedronGeometry(r * (0.6 + t() * 0.3), 1), x + (t() - 0.5) * r, 3.4 + t() * 1.2, z + (t() - 0.5) * r);
     block(x, z, 0.5, 0.5);
   };
-  for (const [x, z] of [[-10, 30], [-14, 40], [-9, 46], [11, 30], [16, 38], [-16, 56], [10, 60], [-6, 62], [20, 56]]) tree(x, z, 2.0 + (Math.abs(x) % 3) * 0.3);
+  // Broad-leaved trees with photographed bark and leaves; three shapes shared across the garden.
+  void tree;
+  const treeMats = treeMaterials(loader, maxAniso);
+  treeMats.textures.forEach(t => disposables.push(t));
+  disposables.push(treeMats.bark, treeMats.leaves);
+  const variants = [buildTreeVariant(1, 7.5), buildTreeVariant(2, 6.5), buildTreeVariant(3, 8.2)];
+  variants.forEach(vt => disposables.push(vt.bark, vt.leaves));
+  [[-10, 30], [-14, 40], [-9, 46], [11, 30], [16, 38], [-16, 56], [10, 60], [-6, 62], [20, 56]].forEach(([x, z], i) => {
+    const vt = variants[i % variants.length];
+    const tg = new THREE.Group();
+    const bk = new THREE.Mesh(vt.bark, treeMats.bark);
+    const lv = new THREE.Mesh(vt.leaves, treeMats.leaves);
+    bk.castShadow = lv.castShadow = true;
+    bk.receiveShadow = lv.receiveShadow = true;
+    tg.add(bk, lv);
+    tg.position.set(x, 0, z);
+    tg.rotation.y = i * 2.3;
+    tg.scale.setScalar(0.9 + (i % 3) * 0.12);
+    group.add(tg);
+    block(x, z, 0.45, 0.45);
+  });
   // Flower beds.
   const flowerColors = ['#f4f1ea', '#e7b8c4', '#f2d779', '#c7b6e6', '#ef8b8b'];
   for (const [bx, bz] of [[-9, 36], [9, 36], [-9, 42], [9, 42]]) {
@@ -1144,6 +1166,34 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   outdoorMary.rotation.y = -Math.PI / 2;
   outdoorMary.scale.setScalar(1.08);
   group.add(outdoorMary);
+  // Sculpted Lourdes statue: white stone with a blue sash and golden roses at the feet.
+  new GLTFLoader().load('/models/statues/lourdes.glb', gl => {
+    const st = new THREE.Group();
+    gl.scene.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.material = marble;
+      m.castShadow = true; m.receiveShadow = true;
+    });
+    st.add(gl.scene);
+    const blue = mat(new THREE.MeshStandardMaterial({ color: '#4b78b8', roughness: 0.4 }));
+    const sash = new THREE.Mesh(new THREE.TorusGeometry(0.138, 0.013, 8, 40), blue);
+    sash.rotation.x = Math.PI / 2; sash.position.y = 0.99; sash.scale.set(1, 0.8, 1);
+    st.add(sash);
+    for (const k of [-1, 1]) {
+      const rb = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.008), blue);
+      rb.position.set(0.03 * k, 0.7, 0.13 + 0.02 * (k + 1)); rb.rotation.set(-0.12, 0, k * 0.05);
+      st.add(rb);
+      const rose = new THREE.Mesh(new THREE.DodecahedronGeometry(0.03, 1), M.gold);
+      rose.position.set(0.07 * k, 0.07, 0.25); rose.scale.set(1, 0.75, 1);
+      st.add(rose);
+    }
+    st.position.copy(outdoorMary.position);
+    st.rotation.y = outdoorMary.rotation.y;
+    st.scale.setScalar(1.06);
+    group.add(st);
+    outdoorMary.visible = false;
+  });
   const grottoLight = new THREE.SpotLight('#fff1d8', 40, 12, 0.5, 0.6, 1.5);
   grottoLight.position.set(gX - 4, 5, gZ + 1.5);
   grottoLight.target.position.set(gX + 1.2, 2.0, gZ);
@@ -1171,8 +1221,65 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   realModel('/models/nature/boulder-01.glb', [
     { x: gX + 0.2, z: gZ - 3.2, ry: 0.4, s: 1.5 }, { x: gX + 0.4, z: gZ + 3.3, ry: 2.2, s: 1.6 },
     { x: gX + 2.6, z: gZ - 2.0, ry: 1.1, s: 2.2 }, { x: gX + 2.8, z: gZ + 2.0, ry: 3.0, s: 2.0 },
-    { x: gX + 2.3, y: 2.4, z: gZ, ry: 0.8, s: 2.4 }, { x: gX - 1.6, z: gZ - 2.6, ry: 5.0, s: 0.7 },
+    { x: gX + 3.2, y: 3.6, z: gZ, ry: 0.8, s: 2.0 }, { x: gX - 1.6, z: gZ - 2.6, ry: 5.0, s: 0.7 },
   ]);
+
+  // ---------- Gothic boundary fence: stone piers with pinnacles, wrought-iron spear railings ----------
+  {
+    const X = 25.6, ZB = Z_E - APSE_R - 0.2, ZF = 67.6;
+    const runs: [THREE.Vector2, THREE.Vector2][] = [
+      [new THREE.Vector2(-X, ZB), new THREE.Vector2(-X, ZF)], [new THREE.Vector2(X, ZB), new THREE.Vector2(X, ZF)],
+      [new THREE.Vector2(-X, ZF), new THREE.Vector2(X, ZF)], [new THREE.Vector2(-X, ZB), new THREE.Vector2(X, ZB)],
+    ];
+    const ironMat = mat(new THREE.MeshStandardMaterial({ color: '#1d1c1f', roughness: 0.45, metalness: 0.6 }));
+    const goldTip = mat(new THREE.MeshStandardMaterial({ color: '#b8923f', roughness: 0.35, metalness: 0.8 }));
+    const bars: THREE.Matrix4[] = [], tips: THREE.Matrix4[] = [];
+    const m4 = new THREE.Matrix4();
+    for (const [a, b] of runs) {
+      const len = a.distanceTo(b);
+      const along = b.clone().sub(a).normalize();
+      const ry = Math.atan2(along.x, along.y);
+      const bays = Math.ceil(len / 5.6);
+      const bayLen = len / bays;
+      for (let i = 0; i <= bays; i += 1) {
+        const p = a.clone().addScaledVector(along, i * bayLen);
+        // Pier with a pointed pinnacle and small crockets.
+        box('exterior', 0.6, 2.1, 0.6, p.x, 1.05, p.y);
+        box('stone', 0.72, 0.14, 0.72, p.x, 2.17, p.y);
+        bake('stone', new THREE.ConeGeometry(0.34, 1.0, 4), p.x, 2.74, p.y, 0, Math.PI / 4, 0);
+        bake('stone', new THREE.SphereGeometry(0.09, 10, 8), p.x, 3.28, p.y);
+        for (let k = 0; k < 4; k += 1) bake('stone', new THREE.ConeGeometry(0.06, 0.22, 4), p.x + Math.cos(k * Math.PI / 2) * 0.24, 2.42, p.y + Math.sin(k * Math.PI / 2) * 0.24);
+        if (i === bays) break;
+        // Low stone base wall and the railing between piers.
+        const mid = a.clone().addScaledVector(along, (i + 0.5) * bayLen);
+        bake('exterior', new THREE.BoxGeometry(bayLen - 0.6, 0.5, 0.42), mid.x, 0.25, mid.y, 0, ry - Math.PI / 2, 0);
+        bake('stone', new THREE.BoxGeometry(bayLen - 0.6, 0.08, 0.5), mid.x, 0.54, mid.y, 0, ry - Math.PI / 2, 0);
+        for (const y of [0.78, 1.9]) bake('iron', new THREE.BoxGeometry(bayLen - 0.6, 0.05, 0.05), mid.x, y, mid.y, 0, ry - Math.PI / 2, 0);
+        // A pointed (gothic) arch of iron spanning each bay.
+        const half = (bayLen - 0.7) / 2;
+        const arch = new THREE.QuadraticBezierCurve3(new THREE.Vector3(-half, 1.9, 0), new THREE.Vector3(0, 2.75, 0), new THREE.Vector3(half, 1.9, 0));
+        const ag = new THREE.TubeGeometry(arch, 20, 0.025, 6, false);
+        ag.rotateY(ry - Math.PI / 2);
+        bake('iron', ag, mid.x, 0, mid.y, 0, 0, 0, 1, 1, 1, false);
+        const n = Math.floor((bayLen - 0.7) / 0.16);
+        for (let k = 0; k <= n; k += 1) {
+          const off = -half + (k / n) * half * 2;
+          const q = a.clone().addScaledVector(along, (i + 0.5) * bayLen + off);
+          const top = 1.9 + Math.max(0, 0.85 * (1 - Math.pow(off / half, 2))) * 0.95;
+          const h = top - 0.58;
+          bars.push(m4.clone().compose(new THREE.Vector3(q.x, 0.58 + h / 2, q.y), new THREE.Quaternion(), new THREE.Vector3(1, h, 1)));
+          tips.push(m4.clone().compose(new THREE.Vector3(q.x, top + 0.07, q.y), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)));
+        }
+      }
+    }
+    const barMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.014, 0.014, 1, 6), ironMat, bars.length);
+    bars.forEach((mm, i) => barMesh.setMatrixAt(i, mm));
+    const tipMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(0.03, 0.14, 6), goldTip, tips.length);
+    tips.forEach((mm, i) => tipMesh.setMatrixAt(i, mm));
+    barMesh.castShadow = tipMesh.castShadow = true;
+    disposables.push(barMesh.geometry, tipMesh.geometry);
+    group.add(barMesh, tipMesh);
+  }
 
   // Sky dome with a low sun glow, and a ring of distant hills.
   // Photographed sky (Poly Haven HDRI, tonemapped, CC0) on an equirectangular dome.
@@ -1263,7 +1370,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   return {
     group,
     blockers,
-    bounds: { minX: -26, maxX: 26, minZ: Z_E - APSE_R + 0.5, maxZ: 68 },
+    bounds: { minX: -25.0, maxX: 25.0, minZ: Z_E - APSE_R + 0.5, maxZ: 67.0 },
     seats,
     fonts,
     candleStand,

@@ -155,9 +155,11 @@ export const createCrucifix = () => {
   // Suppedaneum (foot rest).
   put(g, new THREE.BoxGeometry(0.3, 0.06, 0.16), m.wood, 0, 1.12, 0.1);
 
-  // Corpus, front at +Z, standing on the foot rest.
+  // Corpus, front at +Z, standing on the foot rest. These primitives are a stand-in until the
+  // sculpted corpus (upgradeCrucifix) has loaded; the crown of thorns and halo stay.
   const c = new THREE.Group();
   c.position.set(0, 1.15, 0.13);
+  c.name = 'corpus';
   g.add(c);
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   // Legs: knees slightly flexed and turned, right foot over left.
@@ -232,6 +234,7 @@ export const createCrucifix = () => {
   }
   const nose = put(head, new THREE.CapsuleGeometry(0.008, 0.032, 6, 8), m.skin, 0, 0.088, 0.094, false);
   nose.rotation.x = 0.3;
+  c.traverse(o => { if ((o as THREE.Mesh).isMesh) o.userData.standIn = true; });
   // Crown of thorns: woven ring with spikes.
   const crown = new THREE.Group();
   crown.position.set(0, 0.155, -0.005);
@@ -364,5 +367,27 @@ export const disposeGroup = (g: THREE.Object3D) => {
     const mm = x as THREE.MeshStandardMaterial;
     mm.map?.dispose();
     x.dispose();
+  });
+};
+
+/** Replaces the crucifix stand-in corpus with the sculpted one (public/models/statues/corpus.glb). */
+export const upgradeCrucifix = (cross: THREE.Object3D, loader: { load: (url: string, ok: (g: { scene: THREE.Object3D }) => void) => void }) => {
+  const c = cross.getObjectByName('corpus');
+  if (!c) return;
+  const mats: Record<string, THREE.Material> = {
+    skin: new THREE.MeshStandardMaterial({ color: '#c39a78', roughness: 0.5, metalness: 0 }),
+    hair: new THREE.MeshStandardMaterial({ color: '#3a281b', roughness: 0.75 }),
+    cloth: new THREE.MeshStandardMaterial({ color: '#efe5cf', roughness: 0.65 }),
+  };
+  loader.load('/models/statues/corpus.glb', g => {
+    g.scene.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.material = mats[(m.material as THREE.Material).name] ?? mats.skin;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    c.traverse(o => { if (o.userData.standIn) o.visible = false; });
+    c.add(g.scene);
   });
 };
