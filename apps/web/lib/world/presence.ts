@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Avatar, type Gesture, type HandsMode, type Posture } from './avatar';
-import { HumanAvatar, LOOKS, lookById } from './human';
+import { LOOKS, lookById, makeChibi } from './looks';
 
 /**
  * Shared presence: visitors on the same "server" (a named room) see each other walk, sit,
@@ -137,7 +137,7 @@ export async function joinServer(
     if (!p.profile) return;
     const pos = p.avatar?.root.position.clone() ?? p.target.clone();
     if (p.avatar) { scene.remove(p.avatar.root); p.avatar.dispose(); }
-    const a: Avatar = new HumanAvatar({ name: p.profile.name, look: lookById(p.profile.look) });
+    const a: Avatar = makeChibi({ name: p.profile.name, look: lookById(p.profile.look), lite: true, rosary: true });
     a.root.position.copy(pos);
     a.root.rotation.y = p.yaw;
     a.root.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; });

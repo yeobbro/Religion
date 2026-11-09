@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import ImmersiveAvatarScene, { type PresenceInfo, type Visitor } from './ImmersiveAvatarScene';
 import { SERVERS } from '@/lib/world/presence';
-import { LOOKS, type Gender } from '@/lib/world/human';
+import { LOOKS, type Gender } from '@/lib/world/looks';
 import { AMBIENCE, IMAGES, PRAYERS, TEXTURES, TRACKS, type Track } from '@/lib/world/credits';
 
 const BAPTISMAL_NAMES = [
@@ -33,7 +33,7 @@ export default function CatholicWorld() {
   const [visitor, setVisitor] = useState<Visitor | null>(null);
   const [name, setName] = useState('');
   const [gender, setGender] = useState<Gender>('female');
-  const [look, setLook] = useState('f-dress');
+  const [look, setLook] = useState('f-white');
   const [ready, setReady] = useState(false);
   const [credits, setCredits] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
@@ -268,7 +268,7 @@ export default function CatholicWorld() {
               <h2>출처와 저작권</h2>
               <button type="button" className="panel-x" onClick={() => setCredits(false)} aria-label="닫기">×</button>
             </header>
-            <p className="credits-lead">이 공간의 사진·음원은 공개 라이선스 자료와 KREWX가 제공한 레퍼런스 이미지를 사이트에서 직접 제공합니다. 성모자상과 피에타는 미켈란젤로 작품 복제품의 3D 스캔이고, 사람은 실사 3D 모델입니다. 성당 건축과 나머지 성물은 코드로 만든 창작물입니다.</p>
+            <p className="credits-lead">이 공간의 사진·음원은 공개 라이선스 자료와 KREWX가 제공한 레퍼런스 이미지를 사이트에서 직접 제공합니다. 성모자상과 피에타는 미켈란젤로 작품 복제품의 3D 스캔이고, 사람들은 릴리전 치비 캐릭터로 코드로 만들었습니다. 성당 건축과 나머지 성물은 코드로 만든 창작물입니다.</p>
             <h3>성가 · 음악</h3>
             <ul>{TRACKS.map(t => <li key={t.id}><b>{t.title}</b> — {t.composer} · 연주/녹음 {t.performer} · {t.license} · <a href={t.source} target="_blank" rel="noreferrer">원본</a></li>)}</ul>
             <h3>기도문 · 기도 노래</h3>
@@ -305,7 +305,7 @@ export default function CatholicWorld() {
                 <label key={o.id} className={look === o.id ? 'on' : ''}>
                   <input type="radio" name="look" value={o.id} checked={look === o.id} onChange={() => setLook(o.id)} />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/models/people/thumbs/${o.id}.jpg`} alt="" />
+                  <img src={`/textures/looks/${o.id}.png`} alt="" />
                   <b>{o.label}</b>
                   <small>{o.hint}</small>
                 </label>

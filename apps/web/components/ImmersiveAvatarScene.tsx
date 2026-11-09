@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import * as THREE from 'three';
 import { Avatar } from '@/lib/world/avatar';
-import { HumanAvatar, lookById } from '@/lib/world/human';
+import { lookById, makeChibi } from '@/lib/world/looks';
 import { buildSite, type Blocker, type Site } from '@/lib/world/cathedral';
-import { createNpcs } from '@/lib/world/npcs';
+import { createNpcs, isMassTime } from '@/lib/world/npcs';
 import { beamTexture, glowTexture } from '@/lib/world/textures';
 import RosaryPanel from './RosaryPanel';
 import { PHRASES, joinServer, showBubble, type Presence } from '@/lib/world/presence';
@@ -24,7 +24,7 @@ type Props = {
 };
 
 type Action =
-  | 'cross' | 'prayer' | 'rosary' | 'bow' | 'greet' | 'seat' | 'veil' | 'candle' | 'confess' | 'mary';
+  | 'cross' | 'prayer' | 'rosary' | 'bow' | 'greet' | 'seat' | 'veil' | 'candle' | 'confess' | 'mary' | 'bible';
 
 type Api = {
   act: (a: Action) => void;
@@ -160,7 +160,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
   const [nearBench, setNearBench] = useState(-1);
   const [fontStep, setFontStep] = useState<'water' | 'cross' | 'done'>('water');
   const [joystick, setJoystick] = useState({ x: 0, y: 0 });
-  const [state, setState] = useState({ veil: false, sitting: false, praying: false, rosary: false });
+  const [state, setState] = useState({ veil: false, sitting: false, praying: false, rosary: false, bible: false });
   const [candlePicker, setCandlePicker] = useState(false);
   const [confession, setConfession] = useState<'off' | 'writing' | 'released'>('off');
   const [confessionText, setConfessionText] = useState('');
@@ -416,7 +416,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     };
 
     const say = (s: string) => setNotice(s);
-    const sync = () => setState({ veil: avatar.veilOn, sitting: avatar.posture === 'sit', praying: avatar.hands === 'prayer', rosary: avatar.hands === 'rosary' });
+    const sync = () => setState({ veil: avatar.veilOn, sitting: avatar.posture === 'sit', praying: avatar.hands === 'prayer', rosary: avatar.hands === 'rosary', bible: avatar.hands === 'book' });
     // ----- Shared presence (other visitors on the same server) -----
     let presence: Presence | null = null;
     let joining = 0;
@@ -456,7 +456,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       if (!rebuild) return;
       const old = avatar;
       const look = lookById(v.look);
-      const next = new HumanAvatar({ name: v.name, look });
+      const next = makeChibi({ name: v.name, look });
       next.root.position.copy(old.root.position);
       next.root.rotation.y = old.root.rotation.y;
       next.setPosture(old.posture, 0.48);
@@ -538,6 +538,14 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         avatar.setHands(on ? 'rosary' : 'rest');
         setRosaryOpen(on);
         say(on ? '묵주기도를 시작합니다. 묵주 위에서 휠을 굴려 한 알씩 넘겨 보세요.' : '묵주기도를 마쳤습니다.');
+        sync();
+        return;
+      }
+      if (a === 'bible') {
+        const on = avatar.hands !== 'book';
+        avatar.setHands(on ? 'book' : 'rest');
+        setRosaryOpen(false);
+        say(on ? '성경을 펼쳐 말씀을 묵상합니다. 다시 누르면 덮어요.' : '성경을 덮었습니다.');
         sync();
         return;
       }
@@ -788,6 +796,9 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
     const camLook = new THREE.Vector3();
     const tmpV = new THREE.Vector3();
     let indoor = 1;
+    let lastMassCheck = -1;
+    let massNow = isMassTime();
+    const eyeTmp = new THREE.Vector3();
     let lastIndoorSent = -1;
     let camOverride: [THREE.Vector3, THREE.Vector3] | null = null;
     const introLook = new THREE.Vector3(0, 4.2, -21);
@@ -858,7 +869,16 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       avatar.root.rotation.y += dy * Math.min(1, dt * 9);
 
       avatar.update(dt, moving, speed);
-      npcs.update(dt, time);
+      npcs.update(dt, time, avatar.root.position);
+      // Mass on the hour: tell the visitor when it begins and ends.
+      if (inWorld && Math.floor(time) !== lastMassCheck) {
+        lastMassCheck = Math.floor(time);
+        const m = isMassTime();
+        if (m !== massNow) {
+          massNow = m;
+          say(m ? '⛪ 미사가 시작되었어요. 신부님이 제대에서 미사를 드리고 성가대가 노래합니다. 빈자리에 앉아 함께해요 (스페이스바).' : '미사가 끝났어요. 평화를 빕니다.');
+        }
+      }
       if (presence) {
         presence.update(dt);
         presence.sendState({ x: pos.x, z: pos.z, yaw: avatar.root.rotation.y, posture: avatar.posture, hands: avatar.hands, veil: avatar.veilOn });
@@ -890,6 +910,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       hemi.intensity = THREE.MathUtils.lerp(1.35, 0.85, indoor);
       sun.intensity = THREE.MathUtils.lerp(2.6, 1.6, indoor);
       renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 1.22, indoor);
+      site.setVisitor(pos.x, pos.z);
       site.update(time, dt, indoor);
 
       // Sparkles.
@@ -907,7 +928,8 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
       }
 
       // Camera: over the shoulder; inside the confessional it sits behind the penitent.
-      const eye = 1.62 + (avatar.pelvis.position.y - 0.93) * 0.9;
+      // Eye level follows the avatar's head (chibi figures are shorter; sitting lowers it).
+      const eye = Math.max(0.9, avatar.headWorld(eyeTmp).y + 0.25);
       if (!inWorld) {
         // Before entering: a slow, quiet glide down the nave toward the altar.
         const u = (time * 0.018) % 1;
@@ -1112,6 +1134,7 @@ export default function ImmersiveAvatarScene({ visitor, onIndoor, onReady, onPre
         <button type="button" aria-pressed={state.sitting} onClick={() => act('seat')}>🪑 <L long={state.sitting ? '일어나기' : '앉기'} short={state.sitting ? '일어나기' : '앉기'} /> <kbd>Space</kbd></button>
         <button type="button" className="secondary" aria-pressed={state.rosary} onClick={() => { setMoreOpen(false); act('rosary'); }}>📿 {state.rosary ? '묵주 내려놓기' : '묵주기도'}</button>
         <button type="button" className="secondary" onClick={() => { setMoreOpen(false); act('candle'); }}>🕯 초 봉헌</button>
+        <button type="button" className="secondary" aria-pressed={state.bible} onClick={() => { setMoreOpen(false); act('bible'); }}>📖 {state.bible ? '성경 덮기' : '성경 읽기'}</button>
         {gender === 'female'
           ? <button type="button" className="secondary" aria-pressed={state.veil} onClick={() => { setMoreOpen(false); act('veil'); }}>⛑ {state.veil ? '미사보 벗기' : '미사보 쓰기'}</button>
           : null}

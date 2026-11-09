@@ -58,6 +58,8 @@ export type Site = {
   /** 1 inside the church, 0 in the open air, blended across the doorway. */
   indoorAt: (x: number, z: number) => number;
   update: (time: number, dt: number, indoor: number) => void;
+  /** Where the visitor is, so doors can open as they approach. */
+  setVisitor: (x: number, z: number) => void;
   dispose: () => void;
 };
 
@@ -244,6 +246,46 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   box('stone', W - 2.9, 24, 0.8, -(W + 2.9) / 2, 12, Z_W + 0.4, true);
   box('stone', W - 2.9, 24, 0.8, (W + 2.9) / 2, 12, Z_W + 0.4, true);
   box('stone', 5.8, 24 - 9.6, 0.8, 0, 9.6 + (24 - 9.6) / 2, Z_W + 0.4);
+  // West doors: two oak leaves that swing outward when someone comes near, under a carved transom.
+  const DOOR_H = 6.2, DOOR_W = 2.86;
+  box('woodDark', 5.8, 9.6 - DOOR_H, 0.24, 0, DOOR_H + (9.6 - DOOR_H) / 2, Z_W + 0.4);
+  box('gold', 0.12, 1.4, 0.05, 0, DOOR_H + 1.7, Z_W + 0.27);
+  box('gold', 0.8, 0.12, 0.05, 0, DOOR_H + 1.95, Z_W + 0.27);
+  box('gold', 0.12, 1.4, 0.05, 0, DOOR_H + 1.7, Z_W + 0.53);
+  box('gold', 0.8, 0.12, 0.05, 0, DOOR_H + 1.95, Z_W + 0.53);
+  const doorMat = mat(new THREE.MeshStandardMaterial({ map: M.woodDark.map ?? null, color: '#5a3a24', roughness: 0.6 }));
+  const doorLeaves: { g: THREE.Group; dir: number }[] = [];
+  for (const s of [-1, 1]) {
+    const g = new THREE.Group();
+    g.position.set(s * 2.9, 0, Z_W + 0.4);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_H, 0.14), doorMat);
+    leaf.position.set(-s * DOOR_W / 2, DOOR_H / 2, 0);
+    leaf.castShadow = leaf.receiveShadow = true;
+    g.add(leaf);
+    disposables.push(leaf.geometry);
+    // Raised panels, iron straps and a ring handle on both faces.
+    for (const face of [-1, 1]) {
+      for (const [py, ph] of [[1.4, 2.0], [4.0, 2.6]]) {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W - 0.6, ph, 0.04), M.woodDark);
+        panel.position.set(-s * DOOR_W / 2, py, face * 0.08);
+        g.add(panel);
+        disposables.push(panel.geometry);
+      }
+      for (const py of [0.6, 3.0, 5.6]) {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W - 0.2, 0.08, 0.03), M.iron);
+        strap.position.set(-s * DOOR_W / 2, py, face * 0.1);
+        g.add(strap);
+        disposables.push(strap.geometry);
+      }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 8, 20), M.gold);
+      ring.position.set(-s * (DOOR_W - 0.35), 2.7, face * 0.12);
+      g.add(ring);
+      disposables.push(ring.geometry);
+    }
+    group.add(g);
+    doorLeaves.push({ g, dir: s });
+  }
+  let doorOpen = 0, doorTarget = 0;
   box('stone', W - APSE_R, 24, 0.8, -(W + APSE_R) / 2, 12, Z_E - 0.4, true);
   box('stone', W - APSE_R, 24, 0.8, (W + APSE_R) / 2, 12, Z_E - 0.4, true);
   // Upper nave walls above the arcade, carrying the clerestory.
@@ -1314,7 +1356,13 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     if (Math.abs(x) > W + 0.4 || z < Z_E - APSE_R - 1) return 0;
     return 1 - THREE.MathUtils.smoothstep(z, Z_W - 1.0, Z_W + 3.0);
   };
+  const setVisitor = (x: number, z: number) => {
+    doorTarget = Math.abs(x) < 9 && Math.abs(z - (Z_W + 0.4)) < 7.5 ? 1 : 0;
+  };
   const update = (time: number, dt: number, indoor: number) => {
+    doorOpen += (doorTarget - doorOpen) * Math.min(1, dt * 2.2);
+    // Leaves swing outward (toward +Z): the left one turns negative, the right one positive.
+    for (const d of doorLeaves) d.g.rotation.y = d.dir * doorOpen * 1.5;
     for (const f of flames) {
       const k = 1 + Math.sin(time * 13 + f.phase) * 0.08 + Math.sin(time * 29 + f.phase * 2) * 0.05;
       f.s.scale.set(f.w * (2 - k), f.ht * k, 1);
@@ -1376,6 +1424,7 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     candleStand,
     candleStands,
     benchSeats,
+    setVisitor,
     confessional,
     maryInside: maryKneel,
     grotto: { x: gX - 2.3, z: gZ, yaw: -Math.PI / 2 }, // facing +X (the statue)
