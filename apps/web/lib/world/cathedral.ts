@@ -1158,10 +1158,24 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   for (const z of [FZ + 12, FZ + 24, FZ + 35]) for (const s of [-1, 1]) lamp(s * 2.4, z);
   // Garden benches; each has two places to sit, facing the way the bench faces (ry, like a yaw).
   const benchSeats: BenchSeat[] = [];
-  const benchPlaces: { x: number; z: number; ry: number; s: [number, number, number] }[] = [];
   const bench = (x: number, z: number, ry: number) => {
     const sn = Math.sin(ry), cs = Math.cos(ry);
-    benchPlaces.push({ x, z, ry, s: [1.6, 1.0, 1.05] });
+    // Park bench: slatted seat and backrest (behind the sitter), cast-iron sides with armrests.
+    for (let k = 0; k < 4; k += 1) {
+      const off = -0.18 + k * 0.12;
+      box('wood', 1.9, 0.04, 0.1, x + off * sn, 0.46, z + off * cs, false, ry);
+    }
+    for (let k = 0; k < 3; k += 1) {
+      const y = 0.62 + k * 0.13, off = 0.27 + k * 0.025;
+      bake('wood', new THREE.BoxGeometry(1.9, 0.09, 0.035), x + off * sn, y, z + off * cs, -0.18, ry, 0);
+    }
+    for (const dx of [-0.9, 0.9]) {
+      const sx = x + dx * cs, sz = z - dx * sn;
+      box('iron', 0.06, 0.46, 0.06, sx - 0.18 * sn, 0.23, sz - 0.18 * cs, false, ry);
+      box('iron', 0.06, 0.95, 0.06, sx + 0.27 * sn, 0.47, sz + 0.27 * cs, false, ry);
+      box('iron', 0.06, 0.05, 0.5, sx + 0.04 * sn, 0.68, sz + 0.04 * cs, false, ry);
+      box('iron', 0.06, 0.24, 0.05, sx - 0.2 * sn, 0.57, sz - 0.2 * cs, false, ry);
+    }
     const across = Math.abs(cs) > 0.5;
     block(x, z, across ? 1.0 : 0.3, across ? 0.3 : 1.0, true);
     for (const off of [-0.5, 0.5]) {
@@ -1201,10 +1215,10 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     bake('rock', new THREE.DodecahedronGeometry(0.55 + rocks() * 0.45, 0), gX + 2.0 + rocks() * 0.5, 0.3 + rocks() * 3.4, gZ - 2.2 + rocks() * 4.4, rocks() * 3, rocks() * 3, 0);
   }
   // Ledge for the statue inside the niche.
-  bake('rock', new THREE.DodecahedronGeometry(0.75, 1), gX + 1.2, 0.55, gZ, 0, 0, 0, 1, 0.7, 1.2);
-  box('stoneDark', 0.8, 0.25, 0.8, gX + 1.2, 1.0, gZ);
+  bake('rock', new THREE.DodecahedronGeometry(0.75, 1), gX + 0.3, 0.75, gZ, 0, 0, 0, 1, 0.95, 1.2);
+  box('stoneDark', 0.85, 0.25, 0.85, gX + 0.3, 1.38, gZ);
   const outdoorMary = createMarianStatue();
-  outdoorMary.position.set(gX + 1.2, 1.12, gZ);
+  outdoorMary.position.set(gX + 0.3, 1.5, gZ);
   outdoorMary.rotation.y = -Math.PI / 2;
   outdoorMary.scale.setScalar(1.08);
   group.add(outdoorMary);
@@ -1232,13 +1246,13 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
     }
     st.position.copy(outdoorMary.position);
     st.rotation.y = outdoorMary.rotation.y;
-    st.scale.setScalar(1.06);
+    st.scale.setScalar(1.22);
     group.add(st);
     outdoorMary.visible = false;
   });
-  const grottoLight = new THREE.SpotLight('#fff1d8', 40, 12, 0.5, 0.6, 1.5);
+  const grottoLight = new THREE.SpotLight('#fff1d8', 70, 12, 0.45, 0.6, 1.5);
   grottoLight.position.set(gX - 4, 5, gZ + 1.5);
-  grottoLight.target.position.set(gX + 1.2, 2.0, gZ);
+  grottoLight.target.position.set(gX + 0.3, 2.9, gZ);
   group.add(grottoLight, grottoLight.target);
   for (let k = 0; k < 9; k += 1) {
     const z = gZ - 1.6 + k * 0.4;
@@ -1258,7 +1272,6 @@ export const buildSite = (renderer: THREE.WebGLRenderer): Site => {
   // Benches facing the grotto, for sitting with Our Lady in the garden.
   bench(gX - 5.0, gZ - 2.0, -Math.PI / 2);
   bench(gX - 5.0, gZ + 2.0, -Math.PI / 2);
-  realModel('/models/nature/painted-wooden-bench.glb', benchPlaces);
   // Weathered boulders around the grotto, from photographed rock.
   realModel('/models/nature/boulder-01.glb', [
     { x: gX + 0.2, z: gZ - 3.2, ry: 0.4, s: 1.5 }, { x: gX + 0.4, z: gZ + 3.3, ry: 2.2, s: 1.6 },
